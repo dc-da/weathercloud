@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Storica | WeatherStation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-clock-history text-primary me-2"></i>Vista Storica
+    </h4>
+</div>
+
+<!-- Filter controls -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-auto">
+                <label for="dateFrom" class="form-label fw-semibold">Da</label>
+                <input type="date" class="form-control" id="dateFrom">
+            </div>
+            <div class="col-auto">
+                <label for="dateTo" class="form-label fw-semibold">A</label>
+                <input type="date" class="form-control" id="dateTo">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" id="btnFilter">
+                    <i class="bi bi-funnel me-1"></i>Filtra
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Historical backfill controls -->
+<div class="card mb-3 border-warning">
+    <div class="card-header bg-warning-subtle">
+        <i class="bi bi-cloud-download me-1"></i>Download Storico
+    </div>
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-auto">
+                <label for="backfillStartDate" class="form-label fw-semibold">
+                    Data inizio (opzionale)
+                </label>
+                <input type="date" class="form-control" id="backfillStartDate"
+                       placeholder="Auto-resume se dati esistono">
+                <div class="form-text">
+                    Lasciare vuoto per riprendere dall'ultimo dato scaricato.
+                </div>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-warning" id="btnStartBackfill">
+                    <i class="bi bi-cloud-download me-1"></i>Avvia Download Storico
+                </button>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-outline-danger d-none" id="btnStopBackfill">
+                    <i class="bi bi-stop-circle me-1"></i>Stop
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress bar (hidden by default) -->
+        <div class="mt-3 d-none" id="backfillProgressArea">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <small class="fw-semibold" id="backfillLabel">Download in corso...</small>
+                <small class="text-body-secondary" id="backfillPercent">0%</small>
+            </div>
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar" id="backfillBar"
+                     style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+            </div>
+            <small class="text-body-secondary mt-1 d-block" id="backfillDetail"></small>
+        </div>
+    </div>
+</div>
+
+<!-- Chart with metric selector -->
+<div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up me-1"></i>Grafico Storico</span>
+        <div class="d-flex flex-wrap gap-2 mt-1 mt-md-0">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-temp-avg" value="temp_avg" checked>
+                <label class="form-check-label small" for="hm-temp-avg">T media</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-temp-high" value="temp_high">
+                <label class="form-check-label small" for="hm-temp-high">T max</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-temp-low" value="temp_low">
+                <label class="form-check-label small" for="hm-temp-low">T min</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-humidity" value="humidity_avg">
+                <label class="form-check-label small" for="hm-humidity">Umidit&agrave;</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-pressure" value="pressure_avg">
+                <label class="form-check-label small" for="hm-pressure">Pressione</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-wind" value="wind_speed_avg">
+                <label class="form-check-label small" for="hm-wind">Vento</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-precip" value="precip_total">
+                <label class="form-check-label small" for="hm-precip">Pioggia</label>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-2">
+        <div id="historicalChart" style="width:100%; height:400px;"></div>
+    </div>
+</div>
+
+<!-- Data table -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-table me-1"></i>Dati Giornalieri
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="historicalTable" class="table table-striped table-hover table-sm w-100">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>T media (&deg;C)</th>
+                        <th>T max (&deg;C)</th>
+                        <th>T min (&deg;C)</th>
+                        <th>Um. media (%)</th>
+                        <th>Um. max (%)</th>
+                        <th>Um. min (%)</th>
+                        <th>Press. media (hPa)</th>
+                        <th>Vento medio (km/h)</th>
+                        <th>Vento max (km/h)</th>
+                        <th>Raffica max (km/h)</th>
+                        <th>Pioggia (mm)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/historical.js') }}"></script>
+{% endblock %}

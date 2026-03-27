@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Status | WeatherStation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-arrow-repeat text-primary me-2"></i>Sync Status
+    </h4>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Scheduled Jobs -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-calendar-check me-1"></i>Job Pianificati
+            </div>
+            <div class="card-body">
+                <div id="scheduledJobs">
+                    <div class="text-center text-body-secondary py-3">
+                        <div class="spinner-border spinner-border-sm me-1" role="status"></div>
+                        Caricamento...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Actions -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-play-circle me-1"></i>Azioni Sync
+            </div>
+            <div class="card-body d-flex flex-column gap-3">
+                <button class="btn btn-outline-primary" id="btnForceRapid">
+                    <i class="bi bi-lightning me-1"></i>Force Rapid Sync
+                </button>
+                <button class="btn btn-outline-primary" id="btnForceHourly">
+                    <i class="bi bi-clock me-1"></i>Force Hourly Sync
+                </button>
+
+                <div id="syncActionAlert" class="d-none"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backfill Status -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-cloud-download me-1"></i>Stato Backfill
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <small class="text-body-secondary">Ultimo dato storico:</small>
+                    <div class="fw-semibold" id="lastHistoricalDate">--</div>
+                </div>
+                <div>
+                    <small class="text-body-secondary">Stato backfill:</small>
+                    <div id="backfillStatus">
+                        <span class="badge bg-secondary">Inattivo</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sync Log Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-journal-text me-1"></i>Registro Sincronizzazioni</span>
+        <button class="btn btn-sm btn-outline-secondary" id="btnRefreshLog">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="syncLogTable" class="table table-striped table-hover table-sm w-100">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Tipo</th>
+                        <th>Stato</th>
+                        <th>Inizio</th>
+                        <th>Fine</th>
+                        <th>Record letti</th>
+                        <th>Inseriti</th>
+                        <th>Aggiornati</th>
+                        <th>Periodo</th>
+                        <th>Chiamate API</th>
+                        <th>Errore</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    'use strict';
+
+    let syncLogTable;
+
+    // Initialize DataTable
+    function initTable() {
+        syncLogTable = $('#syncLogTable').DataTable({
+            order: [[3, 'desc']],
+            pageLength: 25,
+            language: {
+                emptyTable: "Nessun dato disponibile",
+                info: "Mostra _START_ a _END_ di _TOTAL_ voci",
+                lengthMenu: "Mostra _MENU_ voci",
+                search: "Cerca:",
+                paginate: { first: "Primo", last: "Ultimo", next: "Succ.", previous: "Prec." },
+            },
+            columns: [
+                { data: 'id' },
+                { data: 'job_type',
+                  render: function(d) {
+                      const cls = d === 'rapid' ? 'bg-info' : d === 'hourly' ? 'bg-primary' : 'bg-warning';
+                      return '<span class="badge ' + cls + '">' + d + '</span>';
+                  }
+                },
+                { data: 'status',
+                  render: function(d) {
+                      const cls = d === 'success' ? 'bg-success' : d === 'error' ? 'bg-danger' : 'bg-secondary';
+                      return '<span class="badge ' + cls + '">' + d + '</span>';
+                  }
+                },
+                { data: 'started_at' },
+                { data: 'completed_at' },
+                { data: 'records_fetched', defaultContent: '--' },
+                { data: 'records_inserted', defaultContent: '--' },
+                { data: 'records_updated', defaultContent: '--' },
+                { data: null,
+                  render: function(d) {
+                      if (d.date_range_start && d.date_range_end) {
+                          return d.date_range_start + ' / ' + d.date_range_end;
+                      }
+                      return '--';
+                  }
+                },
+                { data: 'api_calls_made', defaultContent: '--' },
+                { data: 'error_message',
+                  defaultContent: '',
+                  render: function(d) {
+                      if (!d) return '';
+                      const short = d.length > 50 ? d.substring(0, 50) + '...' : d;
+                      return '<span class="text-danger small" title="' + d + '">' + short + '</span>';
+                  }
+                },
+            ],
+        });
+    }
+
+    // Fetch sync status
+    function fetchStatus() {
+        fetch('/api/sync/status')
+            .then(r => r.json())
+            .then(data => {
+                // Scheduled jobs
+                const jobsEl = document.getElementById('scheduledJobs');
+                if (data.scheduled_jobs && data.scheduled_jobs.length > 0) {
+                    let html = '<ul class="list-group list-group-flush">';
+                    data.scheduled_jobs.forEach(function(job) {
+                        html += '<li class="list-group-item d-flex justify-content-between align-items-start px-0">';
+                        html += '<div><strong>' + job.name + '</strong><br>';
+                        html += '<small class="text-body-secondary">ID: ' + job.id + '</small></div>';
+                        html += '<span class="badge bg-primary rounded-pill">' +
+                                (job.next_run || 'N/A') + '</span>';
+                        html += '</li>';
+                    });
+                    html += '</ul>';
+                    jobsEl.innerHTML = html;
+                } else {
+                    jobsEl.innerHTML = '<p class="text-body-secondary mb-0">Nessun job pianificato.</p>';
+                }
+
+                // Last historical date
+                document.getElementById('lastHistoricalDate').textContent =
+                    data.last_historical_date || 'Nessun dato';
+
+                // Backfill status
+                const bfEl = document.getElementById('backfillStatus');
+                if (data.backfill && data.backfill.running) {
+                    bfEl.innerHTML = '<span class="badge bg-warning text-dark">' +
+                        '<span class="spinner-border spinner-border-sm me-1"></span>In corso</span>';
+                    if (data.backfill.current_date) {
+                        bfEl.innerHTML += '<div class="small mt-1">Giorno corrente: ' +
+                            data.backfill.current_date + '</div>';
+                    }
+                } else {
+                    bfEl.innerHTML = '<span class="badge bg-secondary">Inattivo</span>';
+                }
+            })
+            .catch(function() {
+                document.getElementById('scheduledJobs').innerHTML =
+                    '<p class="text-danger mb-0">Errore nel caricamento.</p>';
+            });
+    }
+
+    // Fetch sync log
+    function fetchLog() {
+        fetch('/api/sync/log?limit=100')
+            .then(r => r.json())
+            .then(data => {
+                syncLogTable.clear().rows.add(data).draw();
+            });
+    }
+
+    // Force sync buttons
+    document.getElementById('btnForceRapid').addEventListener('click', function() {
+        this.disabled = true;
+        const btn = this;
+        fetch('/api/sync/rapid/run', { method: 'POST' })
+            .then(r => r.json())
+            .then(function() {
+                showAlert('Rapid sync avviato.', 'success');
+                btn.disabled = false;
+            })
+            .catch(function() {
+                showAlert('Errore avvio rapid sync.', 'danger');
+                btn.disabled = false;
+            });
+    });
+
+    document.getElementById('btnForceHourly').addEventListener('click', function() {
+        this.disabled = true;
+        const btn = this;
+        fetch('/api/sync/hourly/run', { method: 'POST' })
+            .then(r => r.json())
+            .then(function() {
+                showAlert('Hourly sync avviato.', 'success');
+                btn.disabled = false;
+            })
+            .catch(function() {
+                showAlert('Errore avvio hourly sync.', 'danger');
+                btn.disabled = false;
+            });
+    });
+
+    document.getElementById('btnRefreshLog').addEventListener('click', function() {
+        fetchStatus();
+        fetchLog();
+    });
+
+    function showAlert(message, type) {
+        const el = document.getElementById('syncActionAlert');
+        el.className = 'alert alert-' + type + ' py-2 mb-0';
+        el.textContent = message;
+        setTimeout(function() { el.className = 'd-none'; }, 4000);
+    }
+
+    // Initialize
+    initTable();
+    fetchStatus();
+    fetchLog();
+
+    // Auto-refresh every 30s
+    setInterval(function() {
+        fetchStatus();
+        fetchLog();
+    }, 30000);
+})();
+</script>
+{% endblock %}

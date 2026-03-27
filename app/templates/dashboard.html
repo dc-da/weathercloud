@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Istantanea | WeatherStation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-speedometer2 text-primary me-2"></i>Vista Istantanea
+    </h4>
+
+    <div class="d-flex align-items-center gap-3 mt-2 mt-md-0">
+        <!-- Connection status -->
+        <span id="connectionStatus" class="d-flex align-items-center gap-1">
+            <span class="status-dot loading" id="statusDot"></span>
+            <small class="text-body-secondary" id="statusText">Connessione...</small>
+        </span>
+
+        <!-- Last update -->
+        <small class="text-body-secondary">
+            Aggiornato: <span id="lastUpdate" class="fw-semibold">--</span>
+        </small>
+
+        <!-- Refresh selector -->
+        <div class="input-group input-group-sm" style="width: auto;">
+            <label class="input-group-text" for="refreshInterval">
+                <i class="bi bi-arrow-clockwise"></i>
+            </label>
+            <select class="form-select form-select-sm" id="refreshInterval" style="width: auto;">
+                <option value="30">30s</option>
+                <option value="60" selected>60s</option>
+                <option value="300">5 min</option>
+                <option value="0">Manuale</option>
+            </select>
+        </div>
+
+        <button class="btn btn-sm btn-outline-primary" id="btnRefreshNow" title="Aggiorna ora">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Metric cards: 2 rows x 4 cols -->
+<div class="row g-3 mb-4">
+    <!-- Temperature -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Temperatura</div>
+                        <div class="metric-value" id="val-temp">--</div>
+                        <span class="metric-unit">&deg;C</span>
+                    </div>
+                    <span class="metric-icon text-danger">
+                        <i class="bi bi-thermometer-half"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Humidity -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Umidit&agrave;</div>
+                        <div class="metric-value" id="val-humidity">--</div>
+                        <span class="metric-unit">%</span>
+                    </div>
+                    <span class="metric-icon text-info">
+                        <i class="bi bi-droplet-half"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wind -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Vento</div>
+                        <div class="metric-value" id="val-wind">--</div>
+                        <span class="metric-unit">km/h</span>
+                        <span class="ms-1 small text-body-secondary" id="val-wind-dir">--</span>
+                    </div>
+                    <span class="metric-icon text-secondary">
+                        <i class="bi bi-wind"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rain -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Pioggia</div>
+                        <div class="metric-value" id="val-rain-rate">--</div>
+                        <span class="metric-unit">mm/h</span>
+                        <div class="small text-body-secondary mt-1">
+                            Totale: <span id="val-rain-total">--</span> mm
+                        </div>
+                    </div>
+                    <span class="metric-icon text-primary">
+                        <i class="bi bi-cloud-rain"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pressure -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Pressione</div>
+                        <div class="metric-value" id="val-pressure">--</div>
+                        <span class="metric-unit">hPa</span>
+                    </div>
+                    <span class="metric-icon text-success">
+                        <i class="bi bi-speedometer"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Solar Radiation -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Radiazione Solare</div>
+                        <div class="metric-value" id="val-solar">--</div>
+                        <span class="metric-unit">W/m&sup2;</span>
+                    </div>
+                    <span class="metric-icon text-warning">
+                        <i class="bi bi-sun"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UV Index -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Indice UV</div>
+                        <div class="metric-value" id="val-uv">--</div>
+                        <span class="metric-unit">UV</span>
+                    </div>
+                    <span class="metric-icon text-warning">
+                        <i class="bi bi-brightness-high"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dew Point -->
+    <div class="col-6 col-md-3">
+        <div class="card metric-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="text-body-secondary small mb-1">Punto di Rugiada</div>
+                        <div class="metric-value" id="val-dewpoint">--</div>
+                        <span class="metric-unit">&deg;C</span>
+                    </div>
+                    <span class="metric-icon text-info">
+                        <i class="bi bi-moisture"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sparkline chart: last 24h -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-graph-up me-1"></i>Ultime 24 ore &mdash; Temperatura e Umidit&agrave;
+    </div>
+    <div class="card-body p-2">
+        <div id="sparklineChart" style="width:100%; height:280px;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

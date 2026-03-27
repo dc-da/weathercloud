@@ -1,0 +1,7 @@
+flask
+duckdb
+apscheduler
+requests
+pyyaml
+pandas
+openpyxl

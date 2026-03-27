@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Giornaliera | WeatherStation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-calendar-day text-primary me-2"></i>Vista Giornaliera
+    </h4>
+</div>
+
+<!-- Controls -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <!-- Date picker -->
+            <div class="col-auto">
+                <label for="dateSelect" class="form-label fw-semibold">Data</label>
+                <input type="date" class="form-control" id="dateSelect">
+            </div>
+
+            <!-- Source toggle -->
+            <div class="col-auto">
+                <label class="form-label fw-semibold d-block">Fonte dati</label>
+                <div class="btn-group" role="group" aria-label="Fonte dati">
+                    <input type="radio" class="btn-check" name="source" id="srcRapid"
+                           value="rapid" autocomplete="off" checked>
+                    <label class="btn btn-outline-primary btn-sm" for="srcRapid">Rapid</label>
+
+                    <input type="radio" class="btn-check" name="source" id="srcHourly"
+                           value="hourly" autocomplete="off">
+                    <label class="btn btn-outline-primary btn-sm" for="srcHourly">Hourly</label>
+                </div>
+            </div>
+
+            <!-- Metric checkboxes -->
+            <div class="col">
+                <label class="form-label fw-semibold d-block">Metriche</label>
+                <div class="d-flex flex-wrap gap-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkTemp" value="temp" checked>
+                        <label class="form-check-label" for="chkTemp">Temperatura</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkHumidity" value="humidity" checked>
+                        <label class="form-check-label" for="chkHumidity">Umidit&agrave;</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkPressure" value="pressure">
+                        <label class="form-check-label" for="chkPressure">Pressione</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkWind" value="wind">
+                        <label class="form-check-label" for="chkWind">Vento</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkPrecip" value="precip">
+                        <label class="form-check-label" for="chkPrecip">Precipitazioni</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkUV" value="uv">
+                        <label class="form-check-label" for="chkUV">UV</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Load button -->
+            <div class="col-auto">
+                <button class="btn btn-primary" id="btnLoad">
+                    <i class="bi bi-search me-1"></i>Carica
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-graph-up me-1"></i>Grafico
+    </div>
+    <div class="card-body p-2">
+        <div id="dailyChart" style="width:100%; height:400px;"></div>
+    </div>
+</div>
+
+<!-- Data table -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-table me-1"></i>Dati
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table id="dailyTable" class="table table-striped table-hover table-sm w-100">
+                <thead>
+                    <tr>
+                        <th>Ora locale</th>
+                        <th>Temp (&deg;C)</th>
+                        <th>Umidit&agrave; (%)</th>
+                        <th>Pressione (hPa)</th>
+                        <th>Vento (km/h)</th>
+                        <th>Raffica (km/h)</th>
+                        <th>Dir. vento (&deg;)</th>
+                        <th>Pioggia (mm/h)</th>
+                        <th>Pioggia tot. (mm)</th>
+                        <th>Solare (W/m&sup2;)</th>
+                        <th>UV</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/daily.js') }}"></script>
+{% endblock %}

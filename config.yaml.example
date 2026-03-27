@@ -1,0 +1,33 @@
+# Weather Underground
+wu:
+  api_key: "7a0c928d2c00445d8c928d2c00145d34"
+  station_id: "ISANVI15"
+  units: "m"  # m = metric (°C, km/h, mm, hPa)
+
+# Database
+database:
+  path: "data/weather.duckdb"
+
+# API Base URLs
+api:
+  current_conditions: "https://api.weather.com/v2/pws/observations/current"
+  daily_summary_7day: "https://api.weather.com/v2/pws/dailysummary/7day"
+  rapid_history_1day: "https://api.weather.com/v2/pws/observations/all/1day"
+  hourly_history_7day: "https://api.weather.com/v2/pws/observations/all/7day"
+  historical: "https://api.weather.com/v2/pws/history/daily"
+  forecast_5day: "https://api.weather.com/v3/wx/forecast/daily/5day"
+
+# Job Scheduler
+scheduler:
+  rapid_history:
+    enabled: true
+    interval_hours: 4
+  hourly_history:
+    enabled: true
+    interval_hours: 12
+
+# App
+app:
+  host: "0.0.0.0"
+  port: 5001
+  debug: false
