@@ -21,6 +21,49 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     return duckdb.connect(_DB_PATH)
 
 
+def upsert_station_registry(station_id: str, lat: float | None, lon: float | None,
+                            name: str | None = None, country: str | None = None,
+                            neighborhood: str | None = None):
+    """Update or insert station metadata. Called on every current-conditions fetch."""
+    if lat is None or lon is None:
+        return
+    con = get_connection()
+    try:
+        existing = con.execute(
+            "SELECT 1 FROM station_registry WHERE station_id = ?", [station_id]
+        ).fetchone()
+        now = "current_timestamp"
+        if existing:
+            con.execute(
+                f"""UPDATE station_registry
+                    SET latitude = ?, longitude = ?, name = COALESCE(?, name),
+                        country = COALESCE(?, country), neighborhood = COALESCE(?, neighborhood),
+                        last_seen_at = {now}
+                    WHERE station_id = ?""",
+                [lat, lon, name, country, neighborhood, station_id],
+            )
+        else:
+            con.execute(
+                f"""INSERT INTO station_registry
+                    (station_id, name, latitude, longitude, country, neighborhood)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                [station_id, name, lat, lon, country, neighborhood],
+            )
+    finally:
+        con.close()
+
+
+def get_station_registry() -> list[dict]:
+    """Return all stations from the registry."""
+    con = get_connection()
+    try:
+        rows = con.execute("SELECT * FROM station_registry ORDER BY station_id").fetchall()
+        cols = [d[0] for d in con.description]
+        return [dict(zip(cols, r)) for r in rows]
+    finally:
+        con.close()
+
+
 def _create_schema(con: duckdb.DuckDBPyConnection):
     con.execute("""
         CREATE TABLE IF NOT EXISTS rapid_observations (
@@ -90,9 +133,31 @@ def _create_schema(con: duckdb.DuckDBPyConnection):
             wind_speed_high_kmh DOUBLE,
             wind_gust_high_kmh  DOUBLE,
             precip_total_mm     DOUBLE,
+            data_source         VARCHAR DEFAULT 'station',
             synced_at           TIMESTAMP DEFAULT current_timestamp,
             source              VARCHAR DEFAULT 'historical',
             PRIMARY KEY (station_id, obs_date)
+        )
+    """)
+
+    # Migration: add data_source column if missing (existing databases)
+    daily_cols = {r[0] for r in con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_observations'"
+    ).fetchall()}
+    if "data_source" not in daily_cols:
+        con.execute("ALTER TABLE daily_observations ADD COLUMN data_source VARCHAR DEFAULT 'station'")
+
+    # Station registry — caches lat/lon and metadata from API
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS station_registry (
+            station_id          VARCHAR PRIMARY KEY,
+            name                VARCHAR,
+            latitude            DOUBLE,
+            longitude           DOUBLE,
+            country             VARCHAR,
+            neighborhood        VARCHAR,
+            first_seen_at       TIMESTAMP DEFAULT current_timestamp,
+            last_seen_at        TIMESTAMP DEFAULT current_timestamp
         )
     """)
 

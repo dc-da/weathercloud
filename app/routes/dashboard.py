@@ -1,7 +1,7 @@
 from flask import Blueprint, current_app, jsonify, render_template
 
 from ..api_client import WUClient
-from ..database import get_connection
+from ..database import get_connection, upsert_station_registry
 from ..models import map_current_conditions
 
 bp = Blueprint("dashboard", __name__)
@@ -19,7 +19,13 @@ def api_current(station_id):
     obs = client.get_current_conditions(station_id)
     if obs is None:
         return jsonify({"error": "No data available"}), 503
-    return jsonify(map_current_conditions(obs))
+    data = map_current_conditions(obs)
+    if data.get("lat") is not None:
+        upsert_station_registry(
+            station_id=station_id, lat=data["lat"], lon=data["lon"],
+            country=data.get("country"), neighborhood=data.get("neighborhood"),
+        )
+    return jsonify(data)
 
 
 @bp.route("/api/rapid/last24h")

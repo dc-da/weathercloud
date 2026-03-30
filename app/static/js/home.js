@@ -46,6 +46,7 @@
                     <small style="color: var(--ws-text-muted)">${station.station_id}</small>
                 </div>
                 <div class="card-body">
+                    ${c.lat != null ? `<div class="mb-2" style="font-size:0.75rem; color:var(--ws-text-muted)"><i class="bi bi-geo-alt me-1"></i>${Number(c.lat).toFixed(3)}, ${Number(c.lon).toFixed(3)}</div>` : ''}
                     <div class="row g-2 text-center">
                         <div class="col-4">
                             <div class="metric-label">Temp.</div>

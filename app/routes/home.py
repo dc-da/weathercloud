@@ -2,6 +2,7 @@ from flask import Blueprint, current_app, jsonify, render_template
 
 from ..api_client import WUClient
 from ..config import get_all_stations
+from ..database import upsert_station_registry
 from ..models import map_current_conditions
 
 bp = Blueprint("home", __name__)
@@ -23,6 +24,18 @@ def api_stations_current():
     for s in stations:
         obs = client.get_current_conditions(s["id"])
         conditions = map_current_conditions(obs) if obs else None
+
+        # Populate station registry with lat/lon from API response
+        if conditions and conditions.get("lat") is not None:
+            upsert_station_registry(
+                station_id=s["id"],
+                lat=conditions["lat"],
+                lon=conditions["lon"],
+                name=s["name"],
+                country=conditions.get("country"),
+                neighborhood=conditions.get("neighborhood"),
+            )
+
         results.append({
             "station_id": s["id"],
             "name": s["name"],

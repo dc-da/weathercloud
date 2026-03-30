@@ -192,6 +192,9 @@
     const TABLE_COLUMNS = [
         { data: "observed_at_local", title: "Orario", render: (v) => v ? v.split(" ").pop()?.slice(0, 5) || v : "N/D" },
         { data: "temp_c",            title: "Temp (\u00B0C)", render: (v) => fmt(v) },
+        { data: "heat_index_c",      title: "Ind. Calore (\u00B0C)", render: (v) => fmt(v) },
+        { data: "dew_point_c",       title: "Pt. Rugiada (\u00B0C)", render: (v) => fmt(v) },
+        { data: "wind_chill_c",      title: "Wind Chill (\u00B0C)", render: (v) => fmt(v) },
         { data: "humidity_pct",      title: "Umid. (%)", render: (v) => fmt(v, 0) },
         { data: "pressure_hpa",      title: "Press. (hPa)", render: (v) => fmt(v, 1) },
         { data: "wind_speed_kmh",    title: "Vento (km/h)", render: (v) => fmt(v) },

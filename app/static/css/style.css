@@ -445,6 +445,23 @@ h1, h2, h3, h4, h5, h6 {
     font-style: italic;
 }
 
+/* Gap-filled data rows */
+.table .row-gap-fill {
+    background-color: rgba(245, 166, 35, 0.1) !important;
+}
+
+.table .row-gap-fill td::after {
+    content: "";
+}
+
+.table .row-gap-fill td:first-child::before {
+    content: "\f3df ";  /* Bootstrap icon placeholder */
+    font-family: "bootstrap-icons";
+    color: var(--ws-warning);
+    margin-right: 0.3rem;
+    font-size: 0.75rem;
+}
+
 /* --------------------------------------------------------------------------
    Chart containers (Plotly)
    -------------------------------------------------------------------------- */

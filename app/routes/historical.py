@@ -26,7 +26,8 @@ def api_daily(station_id):
                       dew_point_avg_c, dew_point_high_c, dew_point_low_c,
                       pressure_avg_hpa, pressure_max_hpa, pressure_min_hpa,
                       wind_speed_avg_kmh, wind_speed_high_kmh, wind_gust_high_kmh,
-                      precip_total_mm
+                      precip_total_mm,
+                      COALESCE(data_source, 'station') AS data_source
                FROM daily_observations
                WHERE station_id = ?
                  AND obs_date >= ?
@@ -43,6 +44,7 @@ def api_daily(station_id):
             "pressure_avg_hpa", "pressure_max_hpa", "pressure_min_hpa",
             "wind_speed_avg_kmh", "wind_speed_high_kmh", "wind_gust_high_kmh",
             "precip_total_mm",
+            "data_source",
         ]
         data = [dict(zip(columns, [str(v) if v is not None else None for v in row])) for row in rows]
         return jsonify(data)

@@ -85,6 +85,8 @@ def map_current_conditions(obs: dict) -> dict:
         "observed_at": obs.get("obsTimeUtc"),
         "observed_at_local": obs.get("obsTimeLocal"),
         "station_id": obs.get("stationID"),
+        "lat": obs.get("lat"),
+        "lon": obs.get("lon"),
         "neighborhood": obs.get("neighborhood"),
         "country": obs.get("country"),
     }

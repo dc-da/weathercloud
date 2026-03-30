@@ -37,13 +37,20 @@
     };
 
     const METRIC_MAP = {
-        temp_avg:       { key: "temp_avg_c",         label: "Temp. Media (\u00B0C)",  color: "#ff7043", yaxis: "y" },
-        temp_high:      { key: "temp_high_c",        label: "Temp. Max (\u00B0C)",    color: "#ef5350", yaxis: "y" },
-        temp_low:       { key: "temp_low_c",         label: "Temp. Min (\u00B0C)",    color: "#29b6f6", yaxis: "y" },
-        humidity_avg:   { key: "humidity_avg_pct",    label: "Umidit\u00E0 Media (%)",color: "#42a5f5", yaxis: "y2" },
-        pressure_avg:   { key: "pressure_avg_hpa",    label: "Pressione Media (hPa)", color: "#ab47bc", yaxis: "y3" },
-        wind_speed_avg: { key: "wind_speed_avg_kmh",  label: "Vento Medio (km/h)",    color: "#26a69a", yaxis: "y4" },
-        precip_total:   { key: "precip_total_mm",     label: "Precipitazioni (mm)",   color: "#5c6bc0", yaxis: "y4" },
+        temp_avg:        { key: "temp_avg_c",          label: "Temp. Media (\u00B0C)",     color: "#ff7043", yaxis: "y" },
+        temp_high:       { key: "temp_high_c",         label: "Temp. Max (\u00B0C)",       color: "#ef5350", yaxis: "y" },
+        temp_low:        { key: "temp_low_c",          label: "Temp. Min (\u00B0C)",       color: "#29b6f6", yaxis: "y" },
+        dewpt_avg:       { key: "dew_point_avg_c",     label: "Pt. Rugiada Med (\u00B0C)", color: "#4dd0e1", yaxis: "y" },
+        dewpt_high:      { key: "dew_point_high_c",    label: "Pt. Rugiada Max (\u00B0C)", color: "#00bcd4", yaxis: "y" },
+        dewpt_low:       { key: "dew_point_low_c",     label: "Pt. Rugiada Min (\u00B0C)", color: "#80deea", yaxis: "y" },
+        humidity_avg:    { key: "humidity_avg_pct",     label: "Umidit\u00E0 Media (%)",   color: "#42a5f5", yaxis: "y2" },
+        pressure_avg:    { key: "pressure_avg_hpa",     label: "Press. Media (hPa)",       color: "#ab47bc", yaxis: "y3" },
+        pressure_max:    { key: "pressure_max_hpa",     label: "Press. Max (hPa)",         color: "#ce93d8", yaxis: "y3" },
+        pressure_min:    { key: "pressure_min_hpa",     label: "Press. Min (hPa)",         color: "#9575cd", yaxis: "y3" },
+        wind_speed_avg:  { key: "wind_speed_avg_kmh",   label: "Vento Medio (km/h)",       color: "#26a69a", yaxis: "y4" },
+        wind_speed_high: { key: "wind_speed_high_kmh",  label: "Vento Max (km/h)",         color: "#00897b", yaxis: "y4" },
+        wind_gust_high:  { key: "wind_gust_high_kmh",   label: "Raffica Max (km/h)",       color: "#4db6ac", yaxis: "y4" },
+        precip_total:    { key: "precip_total_mm",      label: "Precipitazioni (mm)",      color: "#5c6bc0", yaxis: "y4" },
     };
 
     let rawData = [];
@@ -100,14 +107,17 @@
         const fontColor = "#9aa0a8";
 
         const traces = [];
+        const gapFillIndices = rawData.map((r, i) => r.data_source === "gap_fill" ? i : -1).filter(i => i >= 0);
+
         checked.forEach((group) => {
             const def = METRIC_MAP[group];
             if (!def) return;
 
             const isPrecip = group === "precip_total";
+            const yValues = rawData.map((r) => parseNum(r[def.key]));
             const trace = {
                 x: dates,
-                y: rawData.map((r) => parseNum(r[def.key])),
+                y: yValues,
                 name: def.label,
                 connectgaps: false,
                 yaxis: def.yaxis,
@@ -115,20 +125,31 @@
 
             if (isPrecip) {
                 trace.type = "bar";
-                trace.marker = { color: def.color, opacity: 0.6 };
+                // Color gap-filled bars with amber tint
+                const colors = rawData.map((r) =>
+                    r.data_source === "gap_fill" ? "rgba(245, 166, 35, 0.5)" : def.color
+                );
+                trace.marker = { color: colors, opacity: 0.6 };
             } else {
                 trace.type = "scatter";
                 trace.mode = "lines+markers";
                 trace.line = { color: def.color, width: 2, shape: "spline" };
-                trace.marker = { size: 4 };
+                // Mark gap-filled points with diamond shape and amber border
+                const symbols = rawData.map((r) =>
+                    r.data_source === "gap_fill" ? "diamond" : "circle"
+                );
+                const markerColors = rawData.map((r) =>
+                    r.data_source === "gap_fill" ? "rgba(245, 166, 35, 0.8)" : def.color
+                );
+                trace.marker = { size: 5, symbol: symbols, color: markerColors };
             }
 
             traces.push(trace);
         });
 
         const hasY2 = checked.includes("humidity_avg");
-        const hasY3 = checked.includes("pressure_avg");
-        const hasY4 = checked.some((k) => ["wind_speed_avg", "precip_total"].includes(k));
+        const hasY3 = checked.some((k) => ["pressure_avg", "pressure_max", "pressure_min"].includes(k));
+        const hasY4 = checked.some((k) => ["wind_speed_avg", "wind_speed_high", "wind_gust_high", "precip_total"].includes(k));
 
         const layout = {
             margin: { t: 10, r: 80, b: 70, l: 60 },
@@ -150,17 +171,22 @@
 
     const TABLE_COLUMNS = [
         { data: "obs_date",            title: "Data" },
-        { data: "temp_avg_c",          title: "T. Med (\u00B0C)",   render: (v) => fmt(v) },
-        { data: "temp_high_c",         title: "T. Max (\u00B0C)",   render: (v) => fmt(v) },
-        { data: "temp_low_c",          title: "T. Min (\u00B0C)",   render: (v) => fmt(v) },
-        { data: "humidity_avg_pct",    title: "Umid. Med (%)",      render: (v) => fmt(v, 0) },
-        { data: "humidity_high_pct",   title: "Umid. Max (%)",      render: (v) => fmt(v, 0) },
-        { data: "humidity_low_pct",    title: "Umid. Min (%)",      render: (v) => fmt(v, 0) },
-        { data: "pressure_avg_hpa",    title: "Press. Med (hPa)",   render: (v) => fmt(v, 1) },
-        { data: "wind_speed_avg_kmh",  title: "Vento Med (km/h)",   render: (v) => fmt(v) },
-        { data: "wind_speed_high_kmh", title: "Vento Max (km/h)",   render: (v) => fmt(v) },
-        { data: "wind_gust_high_kmh",  title: "Raff. Max (km/h)",   render: (v) => fmt(v) },
-        { data: "precip_total_mm",     title: "Prec. Tot (mm)",     render: (v) => fmt(v, 2) },
+        { data: "temp_avg_c",          title: "T. Med (\u00B0C)",       render: (v) => fmt(v) },
+        { data: "temp_high_c",         title: "T. Max (\u00B0C)",       render: (v) => fmt(v) },
+        { data: "temp_low_c",          title: "T. Min (\u00B0C)",       render: (v) => fmt(v) },
+        { data: "dew_point_avg_c",     title: "Rug. Med (\u00B0C)",     render: (v) => fmt(v) },
+        { data: "dew_point_high_c",    title: "Rug. Max (\u00B0C)",     render: (v) => fmt(v) },
+        { data: "dew_point_low_c",     title: "Rug. Min (\u00B0C)",     render: (v) => fmt(v) },
+        { data: "humidity_avg_pct",    title: "Umid. Med (%)",          render: (v) => fmt(v, 0) },
+        { data: "humidity_high_pct",   title: "Umid. Max (%)",          render: (v) => fmt(v, 0) },
+        { data: "humidity_low_pct",    title: "Umid. Min (%)",          render: (v) => fmt(v, 0) },
+        { data: "pressure_avg_hpa",    title: "Press. Med (hPa)",       render: (v) => fmt(v, 1) },
+        { data: "pressure_max_hpa",    title: "Press. Max (hPa)",       render: (v) => fmt(v, 1) },
+        { data: "pressure_min_hpa",    title: "Press. Min (hPa)",       render: (v) => fmt(v, 1) },
+        { data: "wind_speed_avg_kmh",  title: "Vento Med (km/h)",       render: (v) => fmt(v) },
+        { data: "wind_speed_high_kmh", title: "Vento Max (km/h)",       render: (v) => fmt(v) },
+        { data: "wind_gust_high_kmh",  title: "Raff. Max (km/h)",       render: (v) => fmt(v) },
+        { data: "precip_total_mm",     title: "Prec. Tot (mm)",         render: (v) => fmt(v, 2) },
     ];
 
     const updateTable = () => {
@@ -178,7 +204,10 @@
             paging: true,
             info: true,
             language: { url: "//cdn.datatables.net/plug-ins/2.0.0/i18n/it-IT.json" },
-            createdRow: (row, data) => { if (isNullRow(data)) row.classList.add("row-null"); },
+            createdRow: (row, data) => {
+                if (isNullRow(data)) row.classList.add("row-null");
+                else if (data.data_source === "gap_fill") row.classList.add("row-gap-fill");
+            },
             destroy: true,
         });
     };

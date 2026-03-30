@@ -103,7 +103,7 @@
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
                        id="hm-temp-avg" value="temp_avg" checked>
-                <label class="form-check-label small" for="hm-temp-avg">T media</label>
+                <label class="form-check-label small" for="hm-temp-avg">T med</label>
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
@@ -117,18 +117,53 @@
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-dewpt-avg" value="dewpt_avg">
+                <label class="form-check-label small" for="hm-dewpt-avg">Rug. med</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-dewpt-high" value="dewpt_high">
+                <label class="form-check-label small" for="hm-dewpt-high">Rug. max</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-dewpt-low" value="dewpt_low">
+                <label class="form-check-label small" for="hm-dewpt-low">Rug. min</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
                        id="hm-humidity" value="humidity_avg">
                 <label class="form-check-label small" for="hm-humidity">Umidit&agrave;</label>
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
-                       id="hm-pressure" value="pressure_avg">
-                <label class="form-check-label small" for="hm-pressure">Pressione</label>
+                       id="hm-press-avg" value="pressure_avg">
+                <label class="form-check-label small" for="hm-press-avg">Press. med</label>
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
-                       id="hm-wind" value="wind_speed_avg">
-                <label class="form-check-label small" for="hm-wind">Vento</label>
+                       id="hm-press-max" value="pressure_max">
+                <label class="form-check-label small" for="hm-press-max">Press. max</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-press-min" value="pressure_min">
+                <label class="form-check-label small" for="hm-press-min">Press. min</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-wind-avg" value="wind_speed_avg">
+                <label class="form-check-label small" for="hm-wind-avg">Vento med</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-wind-high" value="wind_speed_high">
+                <label class="form-check-label small" for="hm-wind-high">Vento max</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input hist-metric" type="checkbox"
+                       id="hm-gust" value="wind_gust_high">
+                <label class="form-check-label small" for="hm-gust">Raffica</label>
             </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input hist-metric" type="checkbox"
@@ -153,16 +188,21 @@
                 <thead>
                     <tr>
                         <th>Data</th>
-                        <th>T media (&deg;C)</th>
+                        <th>T med (&deg;C)</th>
                         <th>T max (&deg;C)</th>
                         <th>T min (&deg;C)</th>
-                        <th>Um. media (%)</th>
+                        <th>Rug. med (&deg;C)</th>
+                        <th>Rug. max (&deg;C)</th>
+                        <th>Rug. min (&deg;C)</th>
+                        <th>Um. med (%)</th>
                         <th>Um. max (%)</th>
                         <th>Um. min (%)</th>
-                        <th>Press. media (hPa)</th>
-                        <th>Vento medio (km/h)</th>
+                        <th>Press. med (hPa)</th>
+                        <th>Press. max (hPa)</th>
+                        <th>Press. min (hPa)</th>
+                        <th>Vento med (km/h)</th>
                         <th>Vento max (km/h)</th>
-                        <th>Raffica max (km/h)</th>
+                        <th>Raff. max (km/h)</th>
                         <th>Pioggia (mm)</th>
                     </tr>
                 </thead>

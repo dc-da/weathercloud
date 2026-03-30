@@ -35,6 +35,7 @@ def create_app():
     from .routes.export import bp as export_bp
     from .routes.home import bp as home_bp
     from .routes.recovery import bp as recovery_bp
+    from .routes.gap_fill import bp as gap_fill_bp
 
     prefix = "/station/<station_id>"
     app.register_blueprint(home_bp)
@@ -45,6 +46,7 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix=prefix)
     app.register_blueprint(sync_bp, url_prefix=prefix)
     app.register_blueprint(export_bp, url_prefix=prefix)
+    app.register_blueprint(gap_fill_bp, url_prefix=prefix)
 
     # ---- before_request: validate station_id for /station/<id>/ routes ----
     @app.before_request
