@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
     <h4 class="mb-0">
-        <i class="bi bi-arrow-repeat text-primary me-2"></i>Sync Status
+        <i class="bi bi-arrow-repeat me-2" style="color: var(--ws-accent)"></i>Sync Status
     </h4>
 </div>
 
@@ -18,7 +18,7 @@
             </div>
             <div class="card-body">
                 <div id="scheduledJobs">
-                    <div class="text-center text-body-secondary py-3">
+                    <div class="text-center py-3" style="color: var(--ws-text-muted)">
                         <div class="spinner-border spinner-border-sm me-1" role="status"></div>
                         Caricamento...
                     </div>
@@ -54,11 +54,11 @@
             </div>
             <div class="card-body">
                 <div class="mb-2">
-                    <small class="text-body-secondary">Ultimo dato storico:</small>
+                    <small style="color: var(--ws-text-muted)">Ultimo dato storico:</small>
                     <div class="fw-semibold" id="lastHistoricalDate">--</div>
                 </div>
                 <div>
-                    <small class="text-body-secondary">Stato backfill:</small>
+                    <small style="color: var(--ws-text-muted)">Stato backfill:</small>
                     <div id="backfillStatus">
                         <span class="badge bg-secondary">Inattivo</span>
                     </div>
@@ -106,9 +106,10 @@
 (function() {
     'use strict';
 
+    var wsUrl = function(path) { return (window.WS_API_PREFIX || '') + path; };
+
     let syncLogTable;
 
-    // Initialize DataTable
     function initTable() {
         syncLogTable = $('#syncLogTable').DataTable({
             order: [[3, 'desc']],
@@ -124,13 +125,13 @@
                 { data: 'id' },
                 { data: 'job_type',
                   render: function(d) {
-                      const cls = d === 'rapid' ? 'bg-info' : d === 'hourly' ? 'bg-primary' : 'bg-warning';
+                      var cls = d === 'rapid' ? 'bg-info' : d === 'hourly' ? 'bg-primary' : 'bg-warning';
                       return '<span class="badge ' + cls + '">' + d + '</span>';
                   }
                 },
                 { data: 'status',
                   render: function(d) {
-                      const cls = d === 'success' ? 'bg-success' : d === 'error' ? 'bg-danger' : 'bg-secondary';
+                      var cls = d === 'success' ? 'bg-success' : d === 'error' ? 'bg-danger' : 'bg-secondary';
                       return '<span class="badge ' + cls + '">' + d + '</span>';
                   }
                 },
@@ -152,27 +153,25 @@
                   defaultContent: '',
                   render: function(d) {
                       if (!d) return '';
-                      const short = d.length > 50 ? d.substring(0, 50) + '...' : d;
-                      return '<span class="text-danger small" title="' + d + '">' + short + '</span>';
+                      var short = d.length > 50 ? d.substring(0, 50) + '...' : d;
+                      return '<span style="color: var(--ws-danger)" class="small" title="' + d + '">' + short + '</span>';
                   }
                 },
             ],
         });
     }
 
-    // Fetch sync status
     function fetchStatus() {
-        fetch('/api/sync/status')
-            .then(r => r.json())
-            .then(data => {
-                // Scheduled jobs
-                const jobsEl = document.getElementById('scheduledJobs');
+        fetch(wsUrl('/api/sync/status'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var jobsEl = document.getElementById('scheduledJobs');
                 if (data.scheduled_jobs && data.scheduled_jobs.length > 0) {
-                    let html = '<ul class="list-group list-group-flush">';
+                    var html = '<ul class="list-group list-group-flush">';
                     data.scheduled_jobs.forEach(function(job) {
                         html += '<li class="list-group-item d-flex justify-content-between align-items-start px-0">';
                         html += '<div><strong>' + job.name + '</strong><br>';
-                        html += '<small class="text-body-secondary">ID: ' + job.id + '</small></div>';
+                        html += '<small style="color: var(--ws-text-muted)">ID: ' + job.id + '</small></div>';
                         html += '<span class="badge bg-primary rounded-pill">' +
                                 (job.next_run || 'N/A') + '</span>';
                         html += '</li>';
@@ -180,17 +179,15 @@
                     html += '</ul>';
                     jobsEl.innerHTML = html;
                 } else {
-                    jobsEl.innerHTML = '<p class="text-body-secondary mb-0">Nessun job pianificato.</p>';
+                    jobsEl.innerHTML = '<p style="color: var(--ws-text-muted)" class="mb-0">Nessun job pianificato.</p>';
                 }
 
-                // Last historical date
                 document.getElementById('lastHistoricalDate').textContent =
                     data.last_historical_date || 'Nessun dato';
 
-                // Backfill status
-                const bfEl = document.getElementById('backfillStatus');
+                var bfEl = document.getElementById('backfillStatus');
                 if (data.backfill && data.backfill.running) {
-                    bfEl.innerHTML = '<span class="badge bg-warning text-dark">' +
+                    bfEl.innerHTML = '<span class="badge bg-warning">' +
                         '<span class="spinner-border spinner-border-sm me-1"></span>In corso</span>';
                     if (data.backfill.current_date) {
                         bfEl.innerHTML += '<div class="small mt-1">Giorno corrente: ' +
@@ -202,25 +199,23 @@
             })
             .catch(function() {
                 document.getElementById('scheduledJobs').innerHTML =
-                    '<p class="text-danger mb-0">Errore nel caricamento.</p>';
+                    '<p style="color: var(--ws-danger)" class="mb-0">Errore nel caricamento.</p>';
             });
     }
 
-    // Fetch sync log
     function fetchLog() {
-        fetch('/api/sync/log?limit=100')
-            .then(r => r.json())
-            .then(data => {
+        fetch(wsUrl('/api/sync/log?limit=100'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
                 syncLogTable.clear().rows.add(data).draw();
             });
     }
 
-    // Force sync buttons
     document.getElementById('btnForceRapid').addEventListener('click', function() {
         this.disabled = true;
-        const btn = this;
-        fetch('/api/sync/rapid/run', { method: 'POST' })
-            .then(r => r.json())
+        var btn = this;
+        fetch(wsUrl('/api/sync/rapid/run'), { method: 'POST' })
+            .then(function(r) { return r.json(); })
             .then(function() {
                 showAlert('Rapid sync avviato.', 'success');
                 btn.disabled = false;
@@ -233,9 +228,9 @@
 
     document.getElementById('btnForceHourly').addEventListener('click', function() {
         this.disabled = true;
-        const btn = this;
-        fetch('/api/sync/hourly/run', { method: 'POST' })
-            .then(r => r.json())
+        var btn = this;
+        fetch(wsUrl('/api/sync/hourly/run'), { method: 'POST' })
+            .then(function(r) { return r.json(); })
             .then(function() {
                 showAlert('Hourly sync avviato.', 'success');
                 btn.disabled = false;
@@ -252,18 +247,16 @@
     });
 
     function showAlert(message, type) {
-        const el = document.getElementById('syncActionAlert');
+        var el = document.getElementById('syncActionAlert');
         el.className = 'alert alert-' + type + ' py-2 mb-0';
         el.textContent = message;
         setTimeout(function() { el.className = 'd-none'; }, 4000);
     }
 
-    // Initialize
     initTable();
     fetchStatus();
     fetchLog();
 
-    // Auto-refresh every 30s
     setInterval(function() {
         fetchStatus();
         fetchLog();

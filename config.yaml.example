@@ -1,8 +1,21 @@
 # Weather Underground
 wu:
-  api_key: "7a0c928d2c00445d8c928d2c00145d34"
-  station_id: "ISANVI15"
+  api_key: "YOUR_API_KEY"
   units: "m"  # m = metric (°C, km/h, mm, hPa)
+
+  # Primary station (main station, supports gap-fill from secondary stations)
+  primary_station:
+    id: "ISANVI15"
+    name: "San Vito al Tagliamento"
+
+  # Secondary stations (optional)
+  secondary_stations:
+    - id: "IPORDENONE42"
+      name: "Pordenone Centro"
+      use_for_gap_fill: true    # contributes data to fill gaps in primary station
+    - id: "IUDINE10"
+      name: "Udine Nord"
+      use_for_gap_fill: false
 
 # Database
 database:
@@ -13,7 +26,7 @@ api:
   current_conditions: "https://api.weather.com/v2/pws/observations/current"
   daily_summary_7day: "https://api.weather.com/v2/pws/dailysummary/7day"
   rapid_history_1day: "https://api.weather.com/v2/pws/observations/all/1day"
-  hourly_history_7day: "https://api.weather.com/v2/pws/observations/all/7day"
+  hourly_history_7day: "https://api.weather.com/v2/pws/observations/hourly/7day"
   historical: "https://api.weather.com/v2/pws/history/daily"
   forecast_5day: "https://api.weather.com/v3/wx/forecast/daily/5day"
 
@@ -25,6 +38,12 @@ scheduler:
   hourly_history:
     enabled: true
     interval_hours: 12
+
+  # Autonomous historical recovery (daily, all stations)
+  auto_recovery:
+    enabled: true
+    daily_api_budget: 1000  # max API calls per day across all stations
+    run_at: "03:00"         # time of day to run (HH:MM, 24h)
 
 # App
 app:

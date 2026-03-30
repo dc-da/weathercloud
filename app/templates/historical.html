@@ -5,74 +5,93 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
     <h4 class="mb-0">
-        <i class="bi bi-clock-history text-primary me-2"></i>Vista Storica
+        <i class="bi bi-clock-history me-2" style="color: var(--ws-accent)"></i>Vista Storica
     </h4>
 </div>
 
-<!-- Filter controls -->
-<div class="card mb-3">
-    <div class="card-body">
-        <div class="row g-3 align-items-end">
-            <div class="col-auto">
-                <label for="dateFrom" class="form-label fw-semibold">Da</label>
-                <input type="date" class="form-control" id="dateFrom">
+<!-- Filter + Backfill controls (same row) -->
+<div class="row g-3 mb-3">
+    <!-- Filter controls (left, 66%) -->
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-funnel me-1"></i>Filtra Dati
             </div>
-            <div class="col-auto">
-                <label for="dateTo" class="form-label fw-semibold">A</label>
-                <input type="date" class="form-control" id="dateTo">
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-sm-4">
+                        <label for="dateFrom" class="form-label fw-semibold">Da</label>
+                        <input type="text" class="form-control ws-datepicker" id="dateFrom">
+                    </div>
+                    <div class="col-sm-4">
+                        <label for="dateTo" class="form-label fw-semibold">A</label>
+                        <input type="text" class="form-control ws-datepicker" id="dateTo">
+                    </div>
+                    <div class="col-sm-4">
+                        <button class="btn btn-primary w-100" id="btnFilter">
+                            <i class="bi bi-funnel me-1"></i>Filtra
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="col-auto">
-                <button class="btn btn-primary" id="btnFilter">
-                    <i class="bi bi-funnel me-1"></i>Filtra
-                </button>
+        </div>
+    </div>
+
+    <!-- Backfill controls (right, 34%) -->
+    <div class="col-lg-4">
+        <div class="card h-100 border-warning">
+            <div class="card-header bg-warning-subtle">
+                <i class="bi bi-cloud-download me-1"></i>Recupero Storico
+            </div>
+            <div class="card-body">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="chkResume">
+                    <label class="form-check-label" for="chkResume">
+                        Riprendi dall'ultimo dato
+                    </label>
+                </div>
+                <div id="backfillDateFields">
+                    <div class="mb-2">
+                        <label for="backfillStartDate" class="form-label fw-semibold">Da</label>
+                        <input type="text" class="form-control ws-datepicker" id="backfillStartDate"
+                               placeholder="Auto-detect">
+                    </div>
+                    <div class="mb-3">
+                        <label for="backfillEndDate" class="form-label fw-semibold">A</label>
+                        <input type="text" class="form-control ws-datepicker" id="backfillEndDate"
+                               placeholder="Oggi">
+                    </div>
+                </div>
+                <div class="form-text mb-3">
+                    Vuoto = auto-detect inizio raccolta → oggi.
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-warning flex-grow-1" id="btnStartBackfill">
+                        <i class="bi bi-cloud-download me-1"></i>Avvia
+                    </button>
+                    <button class="btn btn-outline-danger d-none" id="btnStopBackfill">
+                        <i class="bi bi-stop-circle me-1"></i>Stop
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Historical backfill controls -->
-<div class="card mb-3 border-warning">
-    <div class="card-header bg-warning-subtle">
-        <i class="bi bi-cloud-download me-1"></i>Download Storico
-    </div>
-    <div class="card-body">
-        <div class="row g-3 align-items-end">
-            <div class="col-auto">
-                <label for="backfillStartDate" class="form-label fw-semibold">
-                    Data inizio (opzionale)
-                </label>
-                <input type="date" class="form-control" id="backfillStartDate"
-                       placeholder="Auto-resume se dati esistono">
-                <div class="form-text">
-                    Lasciare vuoto per riprendere dall'ultimo dato scaricato.
-                </div>
-            </div>
-            <div class="col-auto">
-                <button class="btn btn-warning" id="btnStartBackfill">
-                    <i class="bi bi-cloud-download me-1"></i>Avvia Download Storico
-                </button>
-            </div>
-            <div class="col-auto">
-                <button class="btn btn-outline-danger d-none" id="btnStopBackfill">
-                    <i class="bi bi-stop-circle me-1"></i>Stop
-                </button>
+<!-- Backfill progress bar (hidden by default) -->
+<div class="card mb-3 d-none" id="backfillProgressArea">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <small class="fw-semibold" id="backfillLabel">Download in corso...</small>
+            <small style="color: var(--ws-text-secondary)" id="backfillPercent">0%</small>
+        </div>
+        <div class="progress" style="height: 20px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar" id="backfillBar"
+                 style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
             </div>
         </div>
-
-        <!-- Progress bar (hidden by default) -->
-        <div class="mt-3 d-none" id="backfillProgressArea">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-                <small class="fw-semibold" id="backfillLabel">Download in corso...</small>
-                <small class="text-body-secondary" id="backfillPercent">0%</small>
-            </div>
-            <div class="progress" style="height: 20px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                     role="progressbar" id="backfillBar"
-                     style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                </div>
-            </div>
-            <small class="text-body-secondary mt-1 d-block" id="backfillDetail"></small>
-        </div>
+        <small style="color: var(--ws-text-muted)" class="mt-1 d-block" id="backfillDetail"></small>
     </div>
 </div>
 

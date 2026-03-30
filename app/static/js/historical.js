@@ -5,6 +5,8 @@
 (() => {
     "use strict";
 
+    const wsUrl = (path) => (window.WS_API_PREFIX || "") + path;
+
     const parseNum = (v) => {
         if (v == null || v === "" || v === "None") return null;
         const n = Number(v);
@@ -34,7 +36,6 @@
         return d.toISOString().slice(0, 10);
     };
 
-    // Metric checkbox value -> DB column mapping
     const METRIC_MAP = {
         temp_avg:       { key: "temp_avg_c",         label: "Temp. Media (\u00B0C)",  color: "#ff7043", yaxis: "y" },
         temp_high:      { key: "temp_high_c",        label: "Temp. Max (\u00B0C)",    color: "#ef5350", yaxis: "y" },
@@ -49,13 +50,21 @@
     let dataTable = null;
     let sseSource = null;
 
+    const getDateValue = (id) => {
+        const el = document.getElementById(id);
+        if (el && el._flatpickr && el._flatpickr.selectedDates.length) {
+            return el._flatpickr.formatDate(el._flatpickr.selectedDates[0], "Y-m-d");
+        }
+        return el?.value || "";
+    };
+
     const fetchData = async () => {
-        const from = document.getElementById("dateFrom")?.value;
-        const to = document.getElementById("dateTo")?.value;
+        const from = getDateValue("dateFrom");
+        const to = getDateValue("dateTo");
         if (!from || !to) return;
 
         try {
-            const resp = await fetch(`/api/daily?from=${from}&to=${to}`);
+            const resp = await fetch(wsUrl(`/api/daily?from=${from}&to=${to}`));
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             rawData = await resp.json();
             updateChart();
@@ -87,25 +96,34 @@
         }
 
         const dates = rawData.map((r) => r.obs_date);
-        const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
-        const gridColor = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
-        const fontColor = isDark ? "#ccc" : "#666";
+        const gridColor = "rgba(255,255,255,0.06)";
+        const fontColor = "#9aa0a8";
 
         const traces = [];
         checked.forEach((group) => {
             const def = METRIC_MAP[group];
             if (!def) return;
-            traces.push({
+
+            const isPrecip = group === "precip_total";
+            const trace = {
                 x: dates,
                 y: rawData.map((r) => parseNum(r[def.key])),
                 name: def.label,
-                type: "scatter",
-                mode: "lines+markers",
-                line: { color: def.color, width: 2 },
-                marker: { size: 4 },
                 connectgaps: false,
                 yaxis: def.yaxis,
-            });
+            };
+
+            if (isPrecip) {
+                trace.type = "bar";
+                trace.marker = { color: def.color, opacity: 0.6 };
+            } else {
+                trace.type = "scatter";
+                trace.mode = "lines+markers";
+                trace.line = { color: def.color, width: 2, shape: "spline" };
+                trace.marker = { size: 4 };
+            }
+
+            traces.push(trace);
         });
 
         const hasY2 = checked.includes("humidity_avg");
@@ -113,18 +131,19 @@
         const hasY4 = checked.some((k) => ["wind_speed_avg", "precip_total"].includes(k));
 
         const layout = {
-            margin: { t: 20, r: 80, b: 70, l: 60 },
+            margin: { t: 10, r: 80, b: 70, l: 60 },
             paper_bgcolor: "rgba(0,0,0,0)",
             plot_bgcolor: "rgba(0,0,0,0)",
-            font: { size: 11, color: fontColor },
-            legend: { orientation: "h", y: -0.3 },
+            font: { family: "Inter, sans-serif", size: 11, color: fontColor },
+            legend: { orientation: "h", y: -0.3, font: { size: 10 } },
             xaxis: { type: "date", gridcolor: gridColor, title: "Data", rangeslider: { visible: true } },
-            yaxis: { title: "Temperatura (\u00B0C)", gridcolor: gridColor, side: "left" },
+            yaxis: { title: "\u00B0C", gridcolor: gridColor, side: "left" },
+            bargap: 0.2,
         };
 
-        if (hasY2) layout.yaxis2 = { title: "Umidit\u00E0 (%)", overlaying: "y", side: "right", range: [0, 100], gridcolor: "transparent" };
-        if (hasY3) layout.yaxis3 = { title: "Pressione (hPa)", overlaying: "y", side: "right", position: 0.95, anchor: "free", gridcolor: "transparent" };
-        if (hasY4) layout.yaxis4 = { title: "Vento / Precipitazioni", overlaying: "y", side: "right", position: hasY3 ? 0.90 : 0.95, anchor: "free", gridcolor: "transparent" };
+        if (hasY2) layout.yaxis2 = { title: "%", overlaying: "y", side: "right", range: [0, 100], gridcolor: "transparent" };
+        if (hasY3) layout.yaxis3 = { title: "hPa", overlaying: "y", side: "right", position: 0.95, anchor: "free", gridcolor: "transparent" };
+        if (hasY4) layout.yaxis4 = { title: "Vento / Precip.", overlaying: "y", side: "right", position: hasY3 ? 0.90 : 0.95, anchor: "free", gridcolor: "transparent" };
 
         Plotly.newPlot(container, traces, layout, { responsive: true, displaylogo: false });
     };
@@ -174,26 +193,79 @@
         const bar = document.getElementById("backfillBar");
         const pctEl = document.getElementById("backfillPercent");
         const detailEl = document.getElementById("backfillDetail");
+        const labelEl = document.getElementById("backfillLabel");
 
         if (btnStart) btnStart.disabled = running;
-        if (btnStop) {
-            btnStop.classList.toggle("d-none", !running);
-        }
-        if (area) area.classList.toggle("d-none", !running);
+        if (btnStop) btnStop.classList.toggle("d-none", !running);
+        if (area) area.classList.toggle("d-none", !running && !detail);
         if (bar) {
             bar.style.width = `${percent}%`;
             bar.setAttribute("aria-valuenow", percent);
         }
         if (pctEl) pctEl.textContent = `${Math.round(percent)}%`;
         if (detailEl) detailEl.textContent = detail;
+        if (labelEl) labelEl.textContent = running ? "Download in corso..." : (detail || "");
+    };
+
+    const getBackfillDate = (id) => {
+        const el = document.getElementById(id);
+        if (el && el._flatpickr && el._flatpickr.selectedDates.length) {
+            return el._flatpickr.formatDate(el._flatpickr.selectedDates[0], "Y-m-d");
+        }
+        return el?.value || null;
+    };
+
+    const autoDetectStartDate = async () => {
+        const btnStart = document.getElementById("btnStartBackfill");
+        if (btnStart) btnStart.disabled = true;
+        setBackfillUI(true, 0, "Ricerca automatica data di inizio raccolta dati...");
+
+        try {
+            const resp = await fetch(wsUrl("/api/sync/historical/detect-start"), { method: "POST" });
+            const data = await resp.json();
+            if (!resp.ok || !data.found) {
+                setBackfillUI(false, 0, "");
+                alert("Impossibile trovare dati storici per questa stazione negli ultimi 10 anni.");
+                return null;
+            }
+            // Set the detected date in the input
+            const el = document.getElementById("backfillStartDate");
+            if (el && el._flatpickr) el._flatpickr.setDate(data.start_date, true);
+            else if (el) el.value = data.start_date;
+            return data.start_date;
+        } catch (err) {
+            console.error("autoDetectStartDate error:", err);
+            setBackfillUI(false, 0, "");
+            alert("Errore durante la ricerca automatica della data di inizio.");
+            return null;
+        }
     };
 
     const startBackfill = async () => {
-        let startDate = document.getElementById("backfillStartDate")?.value || null;
+        const resume = document.getElementById("chkResume")?.checked || false;
+
+        let startDate = null;
+        let endDate = null;
+
+        if (resume) {
+            // Resume mode: no dates needed, backend picks up from last synced + 1
+        } else {
+            startDate = getBackfillDate("backfillStartDate");
+            endDate = getBackfillDate("backfillEndDate");
+
+            // If no start date, auto-detect via binary search
+            if (!startDate) {
+                startDate = await autoDetectStartDate();
+                if (!startDate) return;
+            }
+        }
 
         try {
-            const body = startDate ? { start_date: startDate } : {};
-            const resp = await fetch("/api/sync/historical/start", {
+            const body = {};
+            if (startDate) body.start_date = startDate;
+            if (endDate) body.end_date = endDate;
+
+            const resp = await fetch(wsUrl("/api/sync/historical/start"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -201,15 +273,8 @@
             const data = await resp.json();
 
             if (!resp.ok) {
-                if (data.needs_start_date) {
-                    const input = prompt("Nessun dato storico esistente. Inserisci la data di inizio (YYYY-MM-DD):");
-                    if (input) {
-                        document.getElementById("backfillStartDate").value = input;
-                        return startBackfill();
-                    }
-                    return;
-                }
                 alert(`Errore: ${data.error || "Impossibile avviare il backfill"}`);
+                setBackfillUI(false, 0, "");
                 return;
             }
 
@@ -218,12 +283,13 @@
         } catch (err) {
             console.error("startBackfill error:", err);
             alert("Errore di connessione durante l'avvio del backfill.");
+            setBackfillUI(false, 0, "");
         }
     };
 
     const stopBackfill = async () => {
         try {
-            await fetch("/api/sync/historical/stop", { method: "POST" });
+            await fetch(wsUrl("/api/sync/historical/stop"), { method: "POST" });
         } catch (err) {
             console.error("stopBackfill error:", err);
         }
@@ -232,7 +298,7 @@
     const listenProgress = () => {
         if (sseSource) { sseSource.close(); sseSource = null; }
 
-        sseSource = new EventSource("/api/sync/historical/progress");
+        sseSource = new EventSource(wsUrl("/api/sync/historical/progress"));
 
         sseSource.onmessage = (event) => {
             try {
@@ -268,8 +334,14 @@
     document.addEventListener("DOMContentLoaded", () => {
         const fromEl = document.getElementById("dateFrom");
         const toEl = document.getElementById("dateTo");
-        if (fromEl && !fromEl.value) fromEl.value = thirtyDaysAgo();
-        if (toEl && !toEl.value) toEl.value = todayISO();
+
+        // Set initial dates via flatpickr or fallback
+        const setInitialDate = (el, val) => {
+            if (el && el._flatpickr) el._flatpickr.setDate(val, false);
+            else if (el) el.value = val;
+        };
+        setInitialDate(fromEl, thirtyDaysAgo());
+        setInitialDate(toEl, todayISO());
 
         document.getElementById("btnFilter")?.addEventListener("click", fetchData);
         fromEl?.addEventListener("change", fetchData);
@@ -279,6 +351,15 @@
 
         document.getElementById("btnStartBackfill")?.addEventListener("click", startBackfill);
         document.getElementById("btnStopBackfill")?.addEventListener("click", stopBackfill);
+
+        // Toggle date fields visibility when "resume" checkbox changes
+        const chkResume = document.getElementById("chkResume");
+        const dateFields = document.getElementById("backfillDateFields");
+        if (chkResume && dateFields) {
+            chkResume.addEventListener("change", () => {
+                dateFields.style.display = chkResume.checked ? "none" : "";
+            });
+        }
 
         fetchData();
     });

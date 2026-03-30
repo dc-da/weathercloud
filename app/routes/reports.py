@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 
 from ..database import get_connection
 
@@ -6,12 +6,12 @@ bp = Blueprint("reports", __name__)
 
 
 @bp.route("/reports")
-def reports_view():
+def reports_view(station_id):
     return render_template("reports.html")
 
 
 @bp.route("/api/report/daily-stats")
-def api_daily_stats():
+def api_daily_stats(station_id):
     source = request.args.get("source", "rapid")
     date_from = request.args.get("from")
     date_to = request.args.get("to")
@@ -19,8 +19,6 @@ def api_daily_stats():
         return jsonify({"error": "from and to parameters required"}), 400
 
     table = "rapid_observations" if source == "rapid" else "hourly_observations"
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         rows = con.execute(
@@ -60,7 +58,7 @@ def api_daily_stats():
 
 
 @bp.route("/api/report/comparison")
-def api_comparison():
+def api_comparison(station_id):
     source = request.args.get("source", "rapid")
     metric = request.args.get("metric", "temp_c")
     a_from = request.args.get("a_from")
@@ -80,8 +78,6 @@ def api_comparison():
         return jsonify({"error": f"Invalid metric. Allowed: {allowed_metrics}"}), 400
 
     table = "rapid_observations" if source == "rapid" else "hourly_observations"
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         def _fetch_period(dfrom, dto):
@@ -103,7 +99,6 @@ def api_comparison():
                 for r in rows
             ]
 
-        # Summary stats for each period
         def _summary(dfrom, dto):
             row = con.execute(
                 f"""SELECT AVG({metric}), MIN({metric}), MAX({metric}),
@@ -126,7 +121,7 @@ def api_comparison():
 
 
 @bp.route("/api/report/heatmap")
-def api_heatmap():
+def api_heatmap(station_id):
     source = request.args.get("source", "rapid")
     metric = request.args.get("metric", "temp_c")
     date_from = request.args.get("from")
@@ -144,8 +139,6 @@ def api_heatmap():
         return jsonify({"error": f"Invalid metric. Allowed: {allowed_metrics}"}), 400
 
     table = "rapid_observations" if source == "rapid" else "hourly_observations"
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         rows = con.execute(

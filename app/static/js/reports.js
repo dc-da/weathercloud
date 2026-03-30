@@ -5,6 +5,8 @@
 (() => {
     "use strict";
 
+    const wsUrl = (path) => (window.WS_API_PREFIX || "") + path;
+
     const parseNum = (v) => {
         if (v == null || v === "" || v === "None") return null;
         const n = Number(v);
@@ -28,6 +30,17 @@
         return el ? el.value : "rapid";
     };
 
+    const getDateValue = (id) => {
+        const el = document.getElementById(id);
+        if (el && el._flatpickr && el._flatpickr.selectedDates.length) {
+            return el._flatpickr.formatDate(el._flatpickr.selectedDates[0], "Y-m-d");
+        }
+        return el?.value || "";
+    };
+
+    const gridColor = "rgba(255,255,255,0.06)";
+    const fontColor = "#9aa0a8";
+
     let statsTable = null;
 
     /* ------------------------------------------------------------------
@@ -35,12 +48,12 @@
        ------------------------------------------------------------------ */
     const generateReport = async () => {
         const source = getSource();
-        const from = document.getElementById("rptDateFrom")?.value;
-        const to = document.getElementById("rptDateTo")?.value;
+        const from = getDateValue("rptDateFrom");
+        const to = getDateValue("rptDateTo");
         if (!from || !to) return alert("Seleziona un periodo");
 
         try {
-            const resp = await fetch(`/api/report/daily-stats?source=${source}&from=${from}&to=${to}`);
+            const resp = await fetch(wsUrl(`/api/report/daily-stats?source=${source}&from=${from}&to=${to}`));
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             drawStatsChart(data);
@@ -52,8 +65,6 @@
 
     const drawStatsChart = (data) => {
         const dates = data.map((d) => d.obs_date);
-        const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
-        const fontColor = isDark ? "#ccc" : "#666";
 
         const traces = [
             {
@@ -61,14 +72,14 @@
                 y: data.map((d) => parseNum(d.temp_max)),
                 name: "Temp Max",
                 type: "bar",
-                marker: { color: "#ef5350", opacity: 0.6 },
+                marker: { color: "rgba(239, 83, 80, 0.7)" },
             },
             {
                 x: dates,
                 y: data.map((d) => parseNum(d.temp_min)),
                 name: "Temp Min",
                 type: "bar",
-                marker: { color: "#42a5f5", opacity: 0.6 },
+                marker: { color: "rgba(66, 165, 245, 0.7)" },
             },
             {
                 x: dates,
@@ -76,21 +87,22 @@
                 name: "Temp Media",
                 type: "scatter",
                 mode: "lines+markers",
-                line: { color: "#ff7043", width: 3 },
+                line: { color: "#ff7043", width: 3, shape: "spline" },
                 marker: { size: 5 },
             },
         ];
 
         const layout = {
             barmode: "group",
-            margin: { t: 20, r: 30, b: 60, l: 60 },
-            xaxis: { title: "Data", type: "date" },
-            yaxis: { title: "°C" },
+            margin: { t: 10, r: 30, b: 60, l: 60 },
+            xaxis: { title: "Data", type: "date", gridcolor: gridColor },
+            yaxis: { title: "\u00B0C", gridcolor: gridColor },
             showlegend: true,
-            legend: { orientation: "h", y: -0.2 },
+            legend: { orientation: "h", y: -0.2, font: { size: 10 } },
             paper_bgcolor: "rgba(0,0,0,0)",
             plot_bgcolor: "rgba(0,0,0,0)",
-            font: { color: fontColor },
+            font: { family: "Inter, sans-serif", color: fontColor },
+            bargap: 0.15,
         };
 
         Plotly.newPlot("dailyStatsChart", traces, layout, { responsive: true, displaylogo: false });
@@ -138,17 +150,17 @@
     const comparePeriods = async () => {
         const source = getSource();
         const metric = document.getElementById("cmpMetric")?.value || "temp_c";
-        const aFrom = document.getElementById("cmpAFrom")?.value;
-        const aTo = document.getElementById("cmpATo")?.value;
-        const bFrom = document.getElementById("cmpBFrom")?.value;
-        const bTo = document.getElementById("cmpBTo")?.value;
+        const aFrom = getDateValue("cmpAFrom");
+        const aTo = getDateValue("cmpATo");
+        const bFrom = getDateValue("cmpBFrom");
+        const bTo = getDateValue("cmpBTo");
 
         if (!aFrom || !aTo || !bFrom || !bTo) return alert("Compila tutti i campi periodo");
 
         try {
             const resp = await fetch(
-                `/api/report/comparison?source=${source}&metric=${metric}` +
-                `&a_from=${aFrom}&a_to=${aTo}&b_from=${bFrom}&b_to=${bTo}`
+                wsUrl(`/api/report/comparison?source=${source}&metric=${metric}` +
+                `&a_from=${aFrom}&a_to=${aTo}&b_from=${bFrom}&b_to=${bTo}`)
             );
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
@@ -162,8 +174,6 @@
     const drawComparisonChart = (data) => {
         const aData = data.period_a.data;
         const bData = data.period_b.data;
-        const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
-        const fontColor = isDark ? "#ccc" : "#666";
 
         const traces = [
             {
@@ -172,7 +182,8 @@
                 name: "Periodo A",
                 type: "scatter",
                 mode: "lines+markers",
-                line: { color: "#0d6efd", width: 2 },
+                line: { color: "#5ba4f5", width: 2, shape: "spline" },
+                marker: { size: 5 },
             },
             {
                 x: bData.map((_, i) => i + 1),
@@ -180,19 +191,20 @@
                 name: "Periodo B",
                 type: "scatter",
                 mode: "lines+markers",
-                line: { color: "#198754", width: 2 },
+                line: { color: "#4ecb71", width: 2, shape: "spline" },
+                marker: { size: 5 },
             },
         ];
 
         const layout = {
-            margin: { t: 20, r: 30, b: 60, l: 60 },
-            xaxis: { title: "Giorno relativo" },
-            yaxis: { title: data.metric },
+            margin: { t: 10, r: 30, b: 60, l: 60 },
+            xaxis: { title: "Giorno relativo", gridcolor: gridColor },
+            yaxis: { title: data.metric, gridcolor: gridColor },
             showlegend: true,
-            legend: { orientation: "h", y: -0.2 },
+            legend: { orientation: "h", y: -0.2, font: { size: 10 } },
             paper_bgcolor: "rgba(0,0,0,0)",
             plot_bgcolor: "rgba(0,0,0,0)",
-            font: { color: fontColor },
+            font: { family: "Inter, sans-serif", color: fontColor },
         };
 
         Plotly.newPlot("comparisonChart", traces, layout, { responsive: true, displaylogo: false });
@@ -228,13 +240,13 @@
     const generateHeatmap = async () => {
         const source = getSource();
         const metric = document.getElementById("heatmapMetric")?.value || "temp_c";
-        const from = document.getElementById("rptDateFrom")?.value;
-        const to = document.getElementById("rptDateTo")?.value;
+        const from = getDateValue("rptDateFrom");
+        const to = getDateValue("rptDateTo");
         if (!from || !to) return alert("Seleziona un periodo");
 
         try {
             const resp = await fetch(
-                `/api/report/heatmap?source=${source}&metric=${metric}&from=${from}&to=${to}`
+                wsUrl(`/api/report/heatmap?source=${source}&metric=${metric}&from=${from}&to=${to}`)
             );
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
@@ -269,21 +281,23 @@
             x: hours,
             y: dates,
             type: "heatmap",
-            colorscale: "RdBu",
-            reversescale: true,
-            colorbar: { title: result.metric },
+            colorscale: [
+                [0, "#42a5f5"],
+                [0.25, "#66bb6a"],
+                [0.5, "#ffa726"],
+                [0.75, "#ef5350"],
+                [1, "#9c27b0"],
+            ],
+            colorbar: { title: result.metric, tickfont: { color: fontColor } },
         }];
 
-        const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
-        const fontColor = isDark ? "#ccc" : "#666";
-
         const layout = {
-            margin: { t: 20, r: 30, b: 60, l: 100 },
-            xaxis: { title: "Ora", dtick: 1 },
+            margin: { t: 10, r: 30, b: 60, l: 100 },
+            xaxis: { title: "Ora", dtick: 1, gridcolor: gridColor },
             yaxis: { title: "Data", type: "category" },
             paper_bgcolor: "rgba(0,0,0,0)",
             plot_bgcolor: "rgba(0,0,0,0)",
-            font: { color: fontColor },
+            font: { family: "Inter, sans-serif", color: fontColor },
         };
 
         Plotly.newPlot("heatmapChart", traces, layout, { responsive: true, displaylogo: false });
@@ -294,16 +308,16 @@
        ------------------------------------------------------------------ */
     const exportCSV = () => {
         const source = getSource();
-        const from = document.getElementById("rptDateFrom")?.value;
-        const to = document.getElementById("rptDateTo")?.value;
+        const from = getDateValue("rptDateFrom");
+        const to = getDateValue("rptDateTo");
         if (!from || !to) return;
         window.location.href = `/api/export/csv?source=${source}&from=${from}&to=${to}`;
     };
 
     const exportXLSX = () => {
         const source = getSource();
-        const from = document.getElementById("rptDateFrom")?.value;
-        const to = document.getElementById("rptDateTo")?.value;
+        const from = getDateValue("rptDateFrom");
+        const to = getDateValue("rptDateTo");
         if (!from || !to) return;
         window.location.href = `/api/export/xlsx?source=${source}&from=${from}&to=${to}`;
     };
@@ -312,16 +326,18 @@
        Init
        ------------------------------------------------------------------ */
     document.addEventListener("DOMContentLoaded", () => {
-        // Default dates
-        const dfrom = document.getElementById("rptDateFrom");
-        const dto = document.getElementById("rptDateTo");
-        if (dfrom && !dfrom.value) dfrom.value = thirtyDaysAgo();
-        if (dto && !dto.value) dto.value = todayISO();
+        const setInitialDate = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && el._flatpickr) el._flatpickr.setDate(val, false);
+            else if (el) el.value = val;
+        };
+
+        setInitialDate("rptDateFrom", thirtyDaysAgo());
+        setInitialDate("rptDateTo", todayISO());
 
         document.getElementById("btnGenerate")?.addEventListener("click", generateReport);
         document.getElementById("btnCompare")?.addEventListener("click", comparePeriods);
 
-        // Heatmap: generate on metric change
         document.getElementById("heatmapMetric")?.addEventListener("change", generateHeatmap);
 
         document.getElementById("btnExportCSV")?.addEventListener("click", exportCSV);

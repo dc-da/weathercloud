@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Recovery Storico | WeatherStation{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-arrow-counterclockwise me-2" style="color: var(--ws-accent)"></i>Recovery Storico Automatico
+    </h4>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" id="btnRefresh">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
+        </button>
+        <button class="btn btn-sm btn-warning" id="btnRunNow">
+            <i class="bi bi-play-fill me-1"></i>Esegui Ora
+        </button>
+    </div>
+</div>
+
+<!-- Queue table -->
+<div class="card mb-3">
+    <div class="card-header">
+        <i class="bi bi-list-check me-1"></i>Coda Stazioni
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm w-100" id="queueTable">
+                <thead>
+                    <tr>
+                        <th>Stazione</th>
+                        <th>Stato</th>
+                        <th>Inizio Dati</th>
+                        <th>Posizione</th>
+                        <th>Fine</th>
+                        <th>Progresso</th>
+                        <th>Chiamate API</th>
+                        <th>Ultimo Run</th>
+                    </tr>
+                </thead>
+                <tbody id="queueBody">
+                    <tr><td colspan="8" class="text-center" style="color: var(--ws-text-muted)">Caricamento...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Recent runs log -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-journal-text me-1"></i>Ultime Esecuzioni
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm w-100" id="logTable">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Stato</th>
+                        <th>Inizio</th>
+                        <th>Fine</th>
+                        <th>Stazioni</th>
+                        <th>Chiamate API</th>
+                        <th>Giorni Recuperati</th>
+                        <th>Giorni Saltati</th>
+                        <th>Nuove Stazioni</th>
+                        <th>Errore</th>
+                    </tr>
+                </thead>
+                <tbody id="logBody">
+                    <tr><td colspan="10" class="text-center" style="color: var(--ws-text-muted)">Caricamento...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/recovery.js') }}"></script>
+{% endblock %}

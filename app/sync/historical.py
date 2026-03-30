@@ -9,6 +9,9 @@ from ..models import map_daily_observation
 
 logger = logging.getLogger(__name__)
 
+API_CALL_DELAY = 5        # seconds between API calls (WU limit: 30/min)
+MAX_DAILY_API_CALLS = 1300  # safety margin on 1500/day WU limit
+
 # Global state for the running backfill job
 _backfill_lock = threading.Lock()
 _backfill_state = {
@@ -31,6 +34,22 @@ def request_stop():
         _backfill_state["stop_requested"] = True
 
 
+def get_dates_with_data(station_id: str, start: date, end: date) -> set[str]:
+    """Return a set of ISO date strings that already have real (non-null) data."""
+    con = get_connection()
+    try:
+        rows = con.execute(
+            """SELECT obs_date FROM daily_observations
+               WHERE station_id = ?
+                 AND obs_date >= ? AND obs_date <= ?
+                 AND temp_avg_c IS NOT NULL""",
+            [station_id, start.isoformat(), end.isoformat()],
+        ).fetchall()
+        return {str(r[0])[:10] for r in rows}
+    finally:
+        con.close()
+
+
 def get_last_synced_date(station_id: str) -> date | None:
     """Find the most recent obs_date in daily_observations for auto-resume."""
     con = get_connection()
@@ -51,28 +70,28 @@ def get_last_synced_date(station_id: str) -> date | None:
         con.close()
 
 
-def start_backfill(cfg: dict, start_date: date | None = None):
+def start_backfill(cfg: dict, station_id: str, start_date: date | None = None, end_date: date | None = None):
     """Start the historical backfill in a background thread.
 
     If start_date is None, auto-resume from the day after the last synced date.
     If no data exists at all, start_date must be provided by the user.
+    If end_date is None, defaults to today.
     """
     with _backfill_lock:
         if _backfill_state["running"]:
             return False
         _backfill_state.update(
             running=True, stop_requested=False, progress=0, total=0,
-            current_date=None, error=None,
+            current_date=None, error=None, station_id=station_id,
         )
 
-    thread = threading.Thread(target=_run_backfill, args=(cfg, start_date), daemon=True)
+    thread = threading.Thread(target=_run_backfill, args=(cfg, station_id, start_date, end_date), daemon=True)
     thread.start()
     return True
 
 
-def _run_backfill(cfg: dict, start_date: date | None):
+def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, end_date: date | None = None):
     client = WUClient(cfg)
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     started_at = datetime.now(timezone.utc)
 
@@ -90,7 +109,8 @@ def _run_backfill(cfg: dict, start_date: date | None):
             con.close()
             return
 
-    end_date = date.today()
+    if end_date is None:
+        end_date = date.today()
 
     if start_date > end_date:
         with _backfill_lock:
@@ -106,11 +126,15 @@ def _run_backfill(cfg: dict, start_date: date | None):
 
     # Sync log entry
     con.execute(
-        "INSERT INTO sync_log (started_at, job_type, status, date_range_start, date_range_end) "
-        "VALUES (?, 'historical', 'running', ?, ?)",
-        [started_at, start_date.isoformat(), end_date.isoformat()],
+        "INSERT INTO sync_log (started_at, job_type, status, date_range_start, date_range_end, station_id) "
+        "VALUES (?, 'historical', 'running', ?, ?, ?)",
+        [started_at, start_date.isoformat(), end_date.isoformat(), station_id],
     )
     log_id = con.execute("SELECT max(id) FROM sync_log").fetchone()[0]
+
+    # Pre-load dates that already have real data — skip them to save API calls
+    existing_dates = get_dates_with_data(station_id, start_date, end_date)
+    skipped = 0
 
     fetched = 0
     inserted = 0
@@ -125,8 +149,29 @@ def _run_backfill(cfg: dict, start_date: date | None):
                     break
                 _backfill_state["current_date"] = current.isoformat()
 
+            # Skip days that already have real data in DB
+            if current.isoformat() in existing_dates:
+                skipped += 1
+                with _backfill_lock:
+                    _backfill_state["progress"] += 1
+                current += timedelta(days=1)
+                continue
+
+            # Daily API call limit (WU allows ~1500/day, keep margin)
+            if api_calls >= MAX_DAILY_API_CALLS:
+                logger.warning(
+                    "Daily API call limit reached (%d calls). Stopping to protect API key.",
+                    api_calls,
+                )
+                with _backfill_lock:
+                    _backfill_state["error"] = (
+                        f"Limite giornaliero di {MAX_DAILY_API_CALLS} chiamate API raggiunto. "
+                        "Riavvia domani con 'Riprendi dall'ultimo dato'."
+                    )
+                break
+
             date_str = current.strftime("%Y%m%d")
-            obs = client.get_historical_daily(date_str)
+            obs = client.get_historical_daily(station_id, date_str)
             api_calls += 1
 
             if obs:
@@ -152,13 +197,16 @@ def _run_backfill(cfg: dict, start_date: date | None):
                 _backfill_state["progress"] += 1
 
             current += timedelta(days=1)
-            time.sleep(0.5)  # Rate limiting
+            time.sleep(API_CALL_DELAY)  # Rate limiting
 
         status = "success"
         error_msg = None
         with _backfill_lock:
             if _backfill_state["stop_requested"]:
                 status = "stopped"
+            elif api_calls >= MAX_DAILY_API_CALLS:
+                status = "api_limit"
+                error_msg = _backfill_state.get("error")
 
     except Exception as e:
         logger.exception("Historical backfill failed")
@@ -181,8 +229,8 @@ def _run_backfill(cfg: dict, start_date: date | None):
             _backfill_state["running"] = False
 
         logger.info(
-            "Historical backfill %s: %d days processed, %d with data",
-            status, inserted, fetched,
+            "Historical backfill %s: %d days processed, %d with data, %d skipped (already in DB)",
+            status, inserted, fetched, skipped,
         )
 
 

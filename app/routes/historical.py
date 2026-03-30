@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 
 from ..database import get_connection
 
@@ -6,19 +6,17 @@ bp = Blueprint("historical", __name__)
 
 
 @bp.route("/historical")
-def historical_view():
+def historical_view(station_id):
     return render_template("historical.html")
 
 
 @bp.route("/api/daily")
-def api_daily():
+def api_daily(station_id):
     date_from = request.args.get("from")
     date_to = request.args.get("to")
     if not date_from or not date_to:
         return jsonify({"error": "from and to parameters required"}), 400
 
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         rows = con.execute(

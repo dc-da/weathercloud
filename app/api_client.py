@@ -13,20 +13,19 @@ BACKOFF_BASE = 2  # seconds
 class WUClient:
     def __init__(self, cfg: dict):
         self.api_key = cfg["wu"]["api_key"]
-        self.station_id = cfg["wu"]["station_id"]
         self.units = cfg["wu"].get("units", "m")
         self.urls = cfg["api"]
 
-    def _common_params(self) -> dict:
+    def _common_params(self, station_id: str) -> dict:
         return {
-            "stationId": self.station_id,
+            "stationId": station_id,
             "apiKey": self.api_key,
             "units": self.units,
             "format": "json",
         }
 
-    def _request(self, url: str, extra_params: dict | None = None) -> dict | None:
-        params = self._common_params()
+    def _request(self, url: str, station_id: str, extra_params: dict | None = None) -> dict | None:
+        params = self._common_params(station_id)
         if extra_params:
             params.update(extra_params)
 
@@ -63,27 +62,32 @@ class WUClient:
         logger.error("All %d attempts failed for %s", MAX_RETRIES, url)
         return None
 
-    def get_current_conditions(self) -> dict | None:
-        data = self._request(self.urls["current_conditions"])
+    def get_current_conditions(self, station_id: str) -> dict | None:
+        data = self._request(self.urls["current_conditions"], station_id)
         if data and "observations" in data and data["observations"]:
             return data["observations"][0]
         return None
 
-    def get_rapid_history_1day(self) -> list[dict]:
-        data = self._request(self.urls["rapid_history_1day"])
+    def get_rapid_history_1day(self, station_id: str) -> list[dict]:
+        data = self._request(self.urls["rapid_history_1day"], station_id)
         if data and "observations" in data:
             return data["observations"]
         return []
 
-    def get_hourly_history_7day(self) -> list[dict]:
-        data = self._request(self.urls["hourly_history_7day"])
+    def get_hourly_history_7day(self, station_id: str) -> list[dict]:
+        data = self._request(self.urls["hourly_history_7day"], station_id)
         if data and "observations" in data:
             return data["observations"]
         return []
 
-    def get_historical_daily(self, date_str: str) -> dict | None:
+    def get_historical_daily(self, station_id: str, date_str: str) -> dict | None:
         """Fetch daily summary for a specific date (YYYYMMDD format)."""
-        data = self._request(self.urls["historical"], extra_params={"date": date_str})
+        data = self._request(self.urls["historical"], station_id, extra_params={"date": date_str})
         if data and "observations" in data and data["observations"]:
             return data["observations"][0]
         return None
+
+    def has_data_on_date(self, station_id: str, dt) -> bool:
+        """Check whether the station has any data for a given date."""
+        obs = self.get_historical_daily(station_id, dt.strftime("%Y%m%d"))
+        return obs is not None

@@ -1,8 +1,7 @@
 import io
-from datetime import datetime
 
 import pandas as pd
-from flask import Blueprint, current_app, request, send_file
+from flask import Blueprint, request, send_file
 
 from ..database import get_connection
 
@@ -45,15 +44,12 @@ def _query_daily(date_from: str, date_to: str, station_id: str) -> pd.DataFrame:
 
 
 @bp.route("/api/export/csv")
-def export_csv():
+def export_csv(station_id):
     source = request.args.get("source", "rapid")
     date_from = request.args.get("from")
     date_to = request.args.get("to")
     if not date_from or not date_to:
         return "from and to parameters required", 400
-
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
 
     if source == "daily":
         df = _query_daily(date_from, date_to, station_id)
@@ -64,20 +60,17 @@ def export_csv():
     df.to_csv(buf, index=False)
     buf.seek(0)
 
-    filename = f"weather_{source}_{date_from}_{date_to}.csv"
+    filename = f"weather_{station_id}_{source}_{date_from}_{date_to}.csv"
     return send_file(buf, mimetype="text/csv", as_attachment=True, download_name=filename)
 
 
 @bp.route("/api/export/xlsx")
-def export_xlsx():
+def export_xlsx(station_id):
     source = request.args.get("source", "rapid")
     date_from = request.args.get("from")
     date_to = request.args.get("to")
     if not date_from or not date_to:
         return "from and to parameters required", 400
-
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
 
     if source == "daily":
         df = _query_daily(date_from, date_to, station_id)
@@ -89,7 +82,7 @@ def export_xlsx():
         df.to_excel(writer, index=False, sheet_name="Data")
     buf.seek(0)
 
-    filename = f"weather_{source}_{date_from}_{date_to}.xlsx"
+    filename = f"weather_{station_id}_{source}_{date_from}_{date_to}.xlsx"
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

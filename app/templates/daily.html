@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
     <h4 class="mb-0">
-        <i class="bi bi-calendar-day text-primary me-2"></i>Vista Giornaliera
+        <i class="bi bi-calendar-day me-2" style="color: var(--ws-accent)"></i>Vista Giornaliera
     </h4>
 </div>
 
@@ -16,7 +16,7 @@
             <!-- Date picker -->
             <div class="col-auto">
                 <label for="dateSelect" class="form-label fw-semibold">Data</label>
-                <input type="date" class="form-control" id="dateSelect">
+                <input type="text" class="form-control ws-datepicker" id="dateSelect">
             </div>
 
             <!-- Source toggle -->
@@ -67,6 +67,26 @@
                                id="chkUV" value="uv">
                         <label class="form-check-label" for="chkUV">UV</label>
                     </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkDewpoint" value="dewpoint">
+                        <label class="form-check-label" for="chkDewpoint">Punto di Rugiada</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkHeatIndex" value="heatindex">
+                        <label class="form-check-label" for="chkHeatIndex">Indice di Calore</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkWindChill" value="windchill">
+                        <label class="form-check-label" for="chkWindChill">Wind Chill</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input metric-check" type="checkbox"
+                               id="chkSolar" value="solar">
+                        <label class="form-check-label" for="chkSolar">Radiazione Solare</label>
+                    </div>
                 </div>
             </div>
 
@@ -86,7 +106,7 @@
         <i class="bi bi-graph-up me-1"></i>Grafico
     </div>
     <div class="card-body p-2">
-        <div id="dailyChart" style="width:100%; height:400px;"></div>
+        <div id="dailyChart" style="width:100%; height:420px;"></div>
     </div>
 </div>
 

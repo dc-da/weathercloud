@@ -8,21 +8,20 @@ from ..models import map_hourly_observation
 logger = logging.getLogger(__name__)
 
 
-def sync_hourly(cfg: dict):
+def sync_hourly(cfg: dict, station_id: str):
     """Fetch hourly observations for the last 7 days and upsert into DB."""
     client = WUClient(cfg)
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     started_at = datetime.now(timezone.utc)
 
     con.execute(
-        "INSERT INTO sync_log (started_at, job_type, status) VALUES (?, 'hourly', 'running')",
-        [started_at],
+        "INSERT INTO sync_log (started_at, job_type, status, station_id) VALUES (?, 'hourly', 'running', ?)",
+        [started_at, station_id],
     )
     log_id = con.execute("SELECT max(id) FROM sync_log").fetchone()[0]
 
     try:
-        observations = client.get_hourly_history_7day()
+        observations = client.get_hourly_history_7day(station_id)
         if not observations:
             con.execute(
                 "UPDATE sync_log SET completed_at=?, status='success', records_fetched=0, api_calls_made=1 WHERE id=?",

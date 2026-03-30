@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 
 from ..database import get_connection
 
@@ -6,18 +6,16 @@ bp = Blueprint("daily", __name__)
 
 
 @bp.route("/daily")
-def daily_view():
+def daily_view(station_id):
     return render_template("daily.html")
 
 
 @bp.route("/api/rapid")
-def api_rapid():
+def api_rapid(station_id):
     date_str = request.args.get("date")
     if not date_str:
         return jsonify({"error": "date parameter required"}), 400
 
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         rows = con.execute(
@@ -49,13 +47,11 @@ def api_rapid():
 
 
 @bp.route("/api/hourly")
-def api_hourly():
+def api_hourly(station_id):
     date_str = request.args.get("date")
     if not date_str:
         return jsonify({"error": "date parameter required"}), 400
 
-    cfg = current_app.config["WS"]
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     try:
         rows = con.execute(

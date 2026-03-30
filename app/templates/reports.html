@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
     <h4 class="mb-0">
-        <i class="bi bi-bar-chart-line text-primary me-2"></i>Vista Report
+        <i class="bi bi-bar-chart-line me-2" style="color: var(--ws-accent)"></i>Vista Report
     </h4>
 </div>
 
@@ -30,11 +30,11 @@
             <!-- Date range -->
             <div class="col-auto">
                 <label for="rptDateFrom" class="form-label fw-semibold">Da</label>
-                <input type="date" class="form-control" id="rptDateFrom">
+                <input type="text" class="form-control ws-datepicker" id="rptDateFrom">
             </div>
             <div class="col-auto">
                 <label for="rptDateTo" class="form-label fw-semibold">A</label>
-                <input type="date" class="form-control" id="rptDateTo">
+                <input type="text" class="form-control ws-datepicker" id="rptDateTo">
             </div>
 
             <!-- Aggregation -->
@@ -71,7 +71,7 @@
     <div class="card-body">
         <div id="dailyStatsChart" style="width:100%; height:380px;"></div>
 
-        <hr>
+        <hr style="border-color: var(--ws-border)">
 
         <div class="table-responsive">
             <table id="dailyStatsTable" class="table table-striped table-hover table-sm w-100">
@@ -107,21 +107,21 @@
         <div class="row g-3 align-items-end mb-3">
             <!-- Period A -->
             <div class="col-auto">
-                <label class="form-label fw-semibold text-primary">Periodo A</label>
+                <label class="form-label fw-semibold" style="color: var(--ws-accent)">Periodo A</label>
                 <div class="input-group input-group-sm">
-                    <input type="date" class="form-control" id="cmpAFrom" aria-label="Periodo A da">
+                    <input type="text" class="form-control ws-datepicker" id="cmpAFrom" aria-label="Periodo A da">
                     <span class="input-group-text">-</span>
-                    <input type="date" class="form-control" id="cmpATo" aria-label="Periodo A a">
+                    <input type="text" class="form-control ws-datepicker" id="cmpATo" aria-label="Periodo A a">
                 </div>
             </div>
 
             <!-- Period B -->
             <div class="col-auto">
-                <label class="form-label fw-semibold text-success">Periodo B</label>
+                <label class="form-label fw-semibold" style="color: var(--ws-success)">Periodo B</label>
                 <div class="input-group input-group-sm">
-                    <input type="date" class="form-control" id="cmpBFrom" aria-label="Periodo B da">
+                    <input type="text" class="form-control ws-datepicker" id="cmpBFrom" aria-label="Periodo B da">
                     <span class="input-group-text">-</span>
-                    <input type="date" class="form-control" id="cmpBTo" aria-label="Periodo B a">
+                    <input type="text" class="form-control ws-datepicker" id="cmpBTo" aria-label="Periodo B a">
                 </div>
             </div>
 
@@ -149,15 +149,15 @@
 
         <div id="comparisonChart" style="width:100%; height:350px;"></div>
 
-        <hr>
+        <hr style="border-color: var(--ws-border)">
 
         <div class="table-responsive">
             <table class="table table-bordered table-sm w-100" id="comparisonTable">
                 <thead>
                     <tr>
                         <th>Statistica</th>
-                        <th class="text-primary">Periodo A</th>
-                        <th class="text-success">Periodo B</th>
+                        <th style="color: var(--ws-accent)">Periodo A</th>
+                        <th style="color: var(--ws-success)">Periodo B</th>
                         <th>Differenza</th>
                     </tr>
                 </thead>

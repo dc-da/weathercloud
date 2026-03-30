@@ -8,22 +8,21 @@ from ..models import map_rapid_observation
 logger = logging.getLogger(__name__)
 
 
-def sync_rapid(cfg: dict):
+def sync_rapid(cfg: dict, station_id: str):
     """Fetch rapid (5-min) observations for the last 24h and upsert into DB."""
     client = WUClient(cfg)
-    station_id = cfg["wu"]["station_id"]
     con = get_connection()
     started_at = datetime.now(timezone.utc)
 
     # Create sync log entry
     con.execute(
-        "INSERT INTO sync_log (started_at, job_type, status) VALUES (?, 'rapid', 'running')",
-        [started_at],
+        "INSERT INTO sync_log (started_at, job_type, status, station_id) VALUES (?, 'rapid', 'running', ?)",
+        [started_at, station_id],
     )
     log_id = con.execute("SELECT max(id) FROM sync_log").fetchone()[0]
 
     try:
-        observations = client.get_rapid_history_1day()
+        observations = client.get_rapid_history_1day(station_id)
         if not observations:
             con.execute(
                 "UPDATE sync_log SET completed_at=?, status='success', records_fetched=0, api_calls_made=1 WHERE id=?",

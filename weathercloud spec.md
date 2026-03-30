@@ -50,7 +50,7 @@ api:
   current_conditions: "https://api.weather.com/v2/pws/observations/current"
   daily_summary_7day: "https://api.weather.com/v2/pws/dailysummary/7day"
   rapid_history_1day: "https://api.weather.com/v2/pws/observations/all/1day"
-  hourly_history_7day: "https://api.weather.com/v2/pws/observations/all/7day"  
+  hourly_history_7day: "https://api.weather.com/v2/pws/observations/hourly/7day"  
   historical: "https://api.weather.com/v2/pws/history/daily"
   forecast_5day: "https://api.weather.com/v3/wx/forecast/daily/5day"
 
@@ -265,7 +265,7 @@ format=json
 - **Risposta:** array di osservazioni a granularità ~5 min
 - **NOTA:** Questa è la finestra a più alta risoluzione. Dopo 24h i dati non sono più disponibili a questa granularità.
 
-### 3. Hourly History 7-Day (`v2/pws/observations/all/7day`)  
+### 3. Hourly History 7-Day (`v2/pws/observations/hourly/7day`)  
 
 - **Uso:** Job hourly_history + Vista giornaliera
 - **Parametri:** solo quelli comuni (restituisce gli ultimi 7 giorni)

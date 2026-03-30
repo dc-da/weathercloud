@@ -113,6 +113,51 @@ def _create_schema(con: duckdb.DuckDBPyConnection):
             date_range_start    TIMESTAMP,
             date_range_end      TIMESTAMP,
             error_message       TEXT,
-            api_calls_made      INTEGER DEFAULT 0
+            api_calls_made      INTEGER DEFAULT 0,
+            station_id          VARCHAR
+        )
+    """)
+
+    # Migration: add station_id column if missing (existing databases)
+    cols = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'sync_log'").fetchall()}
+    if "station_id" not in cols:
+        con.execute("ALTER TABLE sync_log ADD COLUMN station_id VARCHAR")
+
+    # Recovery queue — tracks autonomous historical recovery per station
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS recovery_queue (
+            station_id          VARCHAR PRIMARY KEY,
+            status              VARCHAR NOT NULL DEFAULT 'pending',
+            detected_start      DATE,
+            current_date        DATE,
+            end_date            DATE,
+            days_total          INTEGER DEFAULT 0,
+            days_done           INTEGER DEFAULT 0,
+            days_skipped        INTEGER DEFAULT 0,
+            api_calls_used      INTEGER DEFAULT 0,
+            last_run_at         TIMESTAMP,
+            created_at          TIMESTAMP DEFAULT current_timestamp,
+            error_message       TEXT
+        )
+    """)
+
+    # Recovery daily runs log
+    con.execute("""
+        CREATE SEQUENCE IF NOT EXISTS recovery_log_id_seq START 1
+    """)
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS recovery_log (
+            id                  INTEGER DEFAULT nextval('recovery_log_id_seq') PRIMARY KEY,
+            run_date            DATE NOT NULL,
+            started_at          TIMESTAMP NOT NULL,
+            completed_at        TIMESTAMP,
+            stations_processed  INTEGER DEFAULT 0,
+            api_calls_used      INTEGER DEFAULT 0,
+            days_recovered      INTEGER DEFAULT 0,
+            days_skipped        INTEGER DEFAULT 0,
+            new_stations_found  INTEGER DEFAULT 0,
+            status              VARCHAR NOT NULL DEFAULT 'running',
+            error_message       TEXT
         )
     """)

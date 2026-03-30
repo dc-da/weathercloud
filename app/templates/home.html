@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}WeatherStation — Tutte le Stazioni{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-cloud-sun-fill me-2" style="color: var(--ws-accent)"></i>Stazioni Meteo
+    </h4>
+    <small style="color: var(--ws-text-secondary)">
+        Aggiornato: <span id="lastUpdate" class="fw-semibold">--</span>
+    </small>
+</div>
+
+<div id="stationsGrid" class="row g-3">
+    <!-- Populated by JS -->
+    <div class="ws-loading">
+        <div class="spinner-border spinner-border-sm"></div>
+        <span>Caricamento stazioni...</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}
