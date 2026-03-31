@@ -10,11 +10,16 @@ MAX_RETRIES = 3
 BACKOFF_BASE = 2  # seconds
 
 
+USER_AGENT = "WeatherStationPWS/1.0 (Personal Weather Station Monitor)"
+
+
 class WUClient:
     def __init__(self, cfg: dict):
         self.api_key = cfg["wu"]["api_key"]
         self.units = cfg["wu"].get("units", "m")
         self.urls = cfg["api"]
+        self.session = requests.Session()
+        self.session.headers["User-Agent"] = USER_AGENT
 
     def _common_params(self, station_id: str) -> dict:
         return {
@@ -31,7 +36,7 @@ class WUClient:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                resp = requests.get(url, params=params, timeout=TIMEOUT)
+                resp = self.session.get(url, params=params, timeout=TIMEOUT)
 
                 if resp.status_code == 204 or not resp.content:
                     logger.info("No data returned (HTTP %s) for station %s from %s", resp.status_code, station_id, url)
@@ -105,7 +110,7 @@ class WUClient:
             "apiKey": self.api_key,
         }
         try:
-            resp = requests.get(url, params=params, timeout=TIMEOUT)
+            resp = self.session.get(url, params=params, timeout=TIMEOUT)
             if resp.status_code == 200 and resp.content:
                 return resp.json()
         except requests.exceptions.RequestException as e:

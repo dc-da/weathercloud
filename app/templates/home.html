@@ -34,6 +34,7 @@
 <script>
     window.WS_HOME_AUTO_REFRESH = {{ homepage_auto_refresh | tojson }};
     window.WS_HOME_REFRESH_MS = {{ homepage_refresh_minutes }} * 60 * 1000;
+    window.WS_STATIONS = {{ all_stations | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/home.js') }}"></script>
 {% endblock %}

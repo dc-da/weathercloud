@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Homepage — All Stations Overview (redesigned)
+   Homepage — All Stations Overview (SSE progressive loading)
    ========================================================================== */
 
 (() => {
@@ -21,7 +21,6 @@
 
     const windIcon = (kmh) => {
         if (kmh == null) return "bi-wind";
-        if (kmh < 5) return "bi-wind";
         if (kmh < 20) return "bi-wind";
         return "bi-tornado";
     };
@@ -40,7 +39,7 @@
         const c = station.conditions;
         if (!c) {
             return `
-            <div class="col-12 mb-2">
+            <div class="col-12 mb-2" id="station-${station.station_id}">
                 <div class="card border-primary" style="border-width:2px">
                     <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, var(--ws-surface) 0%, var(--ws-bg-light) 100%)">
                         <span><i class="bi bi-star-fill me-2" style="color: var(--ws-warning)"></i><strong>${station.name}</strong>
@@ -59,7 +58,7 @@
         const tc = tempColor(c.temp_c != null ? Number(c.temp_c) : null);
 
         return `
-        <div class="col-12 mb-2">
+        <div class="col-12 mb-2" id="station-${station.station_id}">
             <div class="card" style="border: 2px solid var(--ws-accent); background: linear-gradient(135deg, var(--ws-surface) 0%, rgba(91,164,245,0.05) 100%)">
                 <div class="card-body py-3">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -153,7 +152,7 @@
 
         if (!c) {
             return `
-            <div class="col-xl-3 col-lg-4 col-md-6 station-card" data-name="${station.name.toLowerCase()}" data-id="${station.station_id.toLowerCase()}" data-online="0">
+            <div class="col-xl-3 col-lg-4 col-md-6 station-card" id="station-${station.station_id}" data-name="${station.name.toLowerCase()}" data-id="${station.station_id.toLowerCase()}" data-online="0">
                 <a href="/station/${station.station_id}/dashboard" class="text-decoration-none">
                     <div class="card h-100" style="opacity:0.45; border-color: var(--ws-border)">
                         <div class="card-body py-2 px-3">
@@ -175,7 +174,7 @@
         const tc = tempColor(c.temp_c != null ? Number(c.temp_c) : null);
 
         return `
-        <div class="col-xl-3 col-lg-4 col-md-6 station-card" data-name="${station.name.toLowerCase()}" data-id="${station.station_id.toLowerCase()}" data-online="1">
+        <div class="col-xl-3 col-lg-4 col-md-6 station-card" id="station-${station.station_id}" data-name="${station.name.toLowerCase()}" data-id="${station.station_id.toLowerCase()}" data-online="1">
             <a href="/station/${station.station_id}/dashboard" class="text-decoration-none">
                 <div class="card metric-card h-100">
                     <div class="card-body py-2 px-3">
@@ -215,6 +214,45 @@
         </div>`;
     };
 
+    // ---- Placeholder card (shown while waiting for data) ----
+    // Note: station list from config uses "id", API results use "station_id"
+    const stationId = (s) => s.station_id || s.id;
+
+    const renderPlaceholderCard = (station) => {
+        const sid = stationId(station);
+        if (station.is_primary) {
+            return `
+            <div class="col-12 mb-2" id="station-${sid}">
+                <div class="card" style="border: 2px solid var(--ws-border); opacity: 0.5">
+                    <div class="card-body py-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-star-fill me-2" style="color: var(--ws-warning); font-size:1.1rem"></i>
+                            <strong style="font-size:1.1rem">${station.name}</strong>
+                            <span class="badge bg-info ms-2">Principale</span>
+                            <span class="spinner-border spinner-border-sm ms-3" style="width:0.9rem;height:0.9rem"></span>
+                            <small class="ms-2" style="color:var(--ws-text-muted)">In attesa…</small>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        }
+        return `
+        <div class="col-xl-3 col-lg-4 col-md-6 station-card" id="station-${sid}" data-name="${station.name.toLowerCase()}" data-id="${sid.toLowerCase()}" data-online="-1">
+            <div class="card h-100" style="opacity:0.35; border-color: var(--ws-border)">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="spinner-border spinner-border-sm me-1" style="width:0.7rem;height:0.7rem;color:var(--ws-text-muted)"></span>
+                            <strong style="font-size:0.85rem; color:var(--ws-text)">${station.name}</strong>
+                        </div>
+                        <small style="color:var(--ws-text-muted); font-size:0.7rem">${sid}</small>
+                    </div>
+                    <div style="color:var(--ws-text-muted); font-size:0.75rem" class="mt-1">In attesa…</div>
+                </div>
+            </div>
+        </div>`;
+    };
+
     // ---- Search filter ----
     const filterStations = (query) => {
         const q = query.toLowerCase().trim();
@@ -225,65 +263,156 @@
         });
     };
 
-    // ---- Main load ----
-    const loadStations = async () => {
+    // ---- Streaming load via SSE ----
+    let activeSource = null; // current EventSource, if any
+
+    const loadStations = () => {
         const grid = document.getElementById("stationsGrid");
         if (!grid) return;
 
-        try {
-            const resp = await fetch("/api/stations/current");
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const stations = await resp.json();
+        // Abort any in-progress stream
+        if (activeSource) {
+            activeSource.close();
+            activeSource = null;
+        }
 
-            // Separate primary and secondary
-            const primary = stations.find((s) => s.is_primary);
-            const secondary = stations.filter((s) => !s.is_primary);
+        const btn = document.getElementById("btnRefresh");
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>0 / …';
+        }
 
-            // Sort secondary: online first, then by distance (nulls last)
-            secondary.sort((a, b) => {
-                const aOnline = a.conditions ? 1 : 0;
-                const bOnline = b.conditions ? 1 : 0;
-                if (aOnline !== bOnline) return bOnline - aOnline;
-                const aDist = a.distance_km ?? 9999;
-                const bDist = b.distance_km ?? 9999;
-                return aDist - bDist;
-            });
-
+        // Build placeholder grid from station list embedded in page
+        const stationList = window.WS_STATIONS || [];
+        if (stationList.length > 0) {
+            // Primary first, then secondary header, then secondary placeholders
+            const primary = stationList.find((s) => s.is_primary);
+            const secondary = stationList.filter((s) => !s.is_primary);
             let html = "";
+            if (primary) html += renderPlaceholderCard(primary);
+            html += `<div class="col-12 mt-2 mb-1" id="secondary-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small style="color:var(--ws-text-secondary)">
+                        <i class="bi bi-diagram-3 me-1"></i>
+                        ${secondary.length} stazioni secondarie
+                        <span class="spinner-border spinner-border-sm ms-2" style="width:0.7rem;height:0.7rem"></span>
+                    </small>
+                </div>
+            </div>`;
+            html += secondary.map(renderPlaceholderCard).join("");
+            grid.innerHTML = html;
+        } else {
+            grid.innerHTML = '<div class="ws-loading"><div class="spinner-border spinner-border-sm"></div><span>Caricamento stazioni…</span></div>';
+        }
 
-            // Primary card (full width)
-            if (primary) html += renderPrimaryCard(primary);
+        const startTime = Date.now();
+        let received = 0;
+        let total = stationList.length || "…";
+        const allStations = []; // collect for final sort
 
-            // Section header for secondary
-            const onlineCount = secondary.filter((s) => s.conditions).length;
-            html += `<div class="col-12 mt-2 mb-1">
+        const source = new EventSource("/api/stations/stream");
+        activeSource = source;
+
+        source.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const station = data.station;
+            total = data.total;
+            received++;
+            allStations.push(station);
+
+            // Update button progress
+            if (btn) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${received}/${total} (${elapsed}s)`;
+            }
+
+            // Replace the placeholder with the real card
+            const placeholder = document.getElementById(`station-${station.station_id}`);
+            if (placeholder) {
+                const html = station.is_primary
+                    ? renderPrimaryCard(station)
+                    : renderSecondaryCard(station);
+                const tmp = document.createElement("div");
+                tmp.innerHTML = html;
+                const newEl = tmp.firstElementChild;
+                placeholder.replaceWith(newEl);
+            }
+
+            // Re-apply search filter if active
+            const searchInput = document.getElementById("stationSearch");
+            if (searchInput && searchInput.value) filterStations(searchInput.value);
+        };
+
+        source.addEventListener("done", () => {
+            source.close();
+            activeSource = null;
+            _onStreamComplete(grid, btn, allStations);
+        });
+
+        source.onerror = () => {
+            source.close();
+            activeSource = null;
+            // If we received some stations, finalize what we have
+            if (allStations.length > 0) {
+                _onStreamComplete(grid, btn, allStations);
+            } else {
+                grid.innerHTML = '<div class="ws-no-data"><i class="bi bi-exclamation-triangle me-2"></i>Errore nel caricamento delle stazioni</div>';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Aggiorna';
+                }
+            }
+        };
+    };
+
+    const _onStreamComplete = (grid, btn, allStations) => {
+        // Re-sort secondary cards: online first, then by distance
+        const secondary = allStations.filter((s) => !s.is_primary);
+        const onlineCount = secondary.filter((s) => s.conditions).length;
+        const offlineCount = secondary.length - onlineCount;
+
+        secondary.sort((a, b) => {
+            const aOnline = a.conditions ? 1 : 0;
+            const bOnline = b.conditions ? 1 : 0;
+            if (aOnline !== bOnline) return bOnline - aOnline;
+            const aDist = a.distance_km ?? 9999;
+            const bDist = b.distance_km ?? 9999;
+            return aDist - bDist;
+        });
+
+        // Rebuild secondary section in sorted order
+        const header = document.getElementById("secondary-header");
+        if (header) {
+            header.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center">
                     <small style="color:var(--ws-text-secondary)">
                         <i class="bi bi-diagram-3 me-1"></i>
                         ${secondary.length} stazioni secondarie
                         <span class="badge bg-success ms-1">${onlineCount} online</span>
-                        ${secondary.length - onlineCount > 0 ? `<span class="badge bg-secondary ms-1">${secondary.length - onlineCount} offline</span>` : ''}
+                        ${offlineCount > 0 ? `<span class="badge bg-secondary ms-1">${offlineCount} offline</span>` : ''}
                     </small>
-                </div>
-            </div>`;
-
-            // Secondary cards
-            html += secondary.map(renderSecondaryCard).join("");
-
-            grid.innerHTML = html;
-
-            // Update timestamp
-            const updateEl = document.getElementById("lastUpdate");
-            if (updateEl) updateEl.textContent = new Date().toLocaleTimeString("it-IT");
-
-            // Re-apply filter if active
-            const searchInput = document.getElementById("stationSearch");
-            if (searchInput && searchInput.value) filterStations(searchInput.value);
-
-        } catch (err) {
-            console.error("loadStations error:", err);
-            grid.innerHTML = '<div class="ws-no-data">Errore nel caricamento delle stazioni</div>';
+                </div>`;
+            // Re-append secondary cards in sorted order after the header
+            const parent = header.parentElement;
+            secondary.forEach((s) => {
+                const el = document.getElementById(`station-${s.station_id}`);
+                if (el) parent.appendChild(el);
+            });
         }
+
+        // Update timestamp
+        const updateEl = document.getElementById("lastUpdate");
+        if (updateEl) updateEl.textContent = new Date().toLocaleTimeString("it-IT");
+
+        // Reset button
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Aggiorna';
+        }
+
+        // Re-apply filter
+        const searchInput = document.getElementById("stationSearch");
+        if (searchInput && searchInput.value) filterStations(searchInput.value);
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -296,7 +425,7 @@
             searchInput.addEventListener("input", () => filterStations(searchInput.value));
         }
 
-        // Auto-refresh driven by YAML config, only while the page is open
+        // Auto-refresh driven by YAML config
         if (window.WS_HOME_AUTO_REFRESH && window.WS_HOME_REFRESH_MS > 0) {
             setInterval(loadStations, window.WS_HOME_REFRESH_MS);
         }
