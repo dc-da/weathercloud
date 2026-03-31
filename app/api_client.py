@@ -91,3 +91,23 @@ class WUClient:
         """Check whether the station has any data for a given date."""
         obs = self.get_historical_daily(station_id, dt.strftime("%Y%m%d"))
         return obs is not None
+
+    def get_forecast_5day(self, lat: float, lon: float) -> dict | None:
+        """Fetch 5-day daily forecast for a geocode. Uses lat/lon, not station_id."""
+        url = self.urls.get("forecast_5day")
+        if not url:
+            return None
+        params = {
+            "geocode": f"{lat},{lon}",
+            "language": "it-IT",
+            "format": "json",
+            "units": self.units,
+            "apiKey": self.api_key,
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=TIMEOUT)
+            if resp.status_code == 200 and resp.content:
+                return resp.json()
+        except requests.exceptions.RequestException as e:
+            logger.error("Forecast request failed: %s", e)
+        return None

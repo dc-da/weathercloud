@@ -38,13 +38,16 @@ def get_dates_with_data(station_id: str, start: date, end: date) -> set[str]:
     """Return a set of ISO date strings that already have real (non-null) data."""
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT obs_date FROM daily_observations
-               WHERE station_id = ?
-                 AND obs_date >= ? AND obs_date <= ?
+               WHERE station_id = %s
+                 AND obs_date >= %s AND obs_date <= %s
                  AND temp_avg_c IS NOT NULL""",
             [station_id, start.isoformat(), end.isoformat()],
-        ).fetchall()
+        )
+        rows = cur.fetchall()
+        cur.close()
         return {str(r[0])[:10] for r in rows}
     finally:
         con.close()
@@ -54,10 +57,13 @@ def get_last_synced_date(station_id: str) -> date | None:
     """Find the most recent obs_date in daily_observations for auto-resume."""
     con = get_connection()
     try:
-        result = con.execute(
-            "SELECT MAX(obs_date) FROM daily_observations WHERE station_id = ?",
+        cur = con.cursor()
+        cur.execute(
+            "SELECT MAX(obs_date) FROM daily_observations WHERE station_id = %s",
             [station_id],
-        ).fetchone()
+        )
+        result = cur.fetchone()
+        cur.close()
         if result and result[0]:
             val = result[0]
             if isinstance(val, str):
@@ -93,6 +99,7 @@ def start_backfill(cfg: dict, station_id: str, start_date: date | None = None, e
 def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, end_date: date | None = None):
     client = WUClient(cfg)
     con = get_connection()
+    cur = con.cursor()
     started_at = datetime.now(timezone.utc)
 
     # Determine start date: user-provided or auto-resume
@@ -106,6 +113,7 @@ def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, en
                     running=False,
                     error="No existing data found. Please provide a start date.",
                 )
+            cur.close()
             con.close()
             return
 
@@ -115,6 +123,7 @@ def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, en
     if start_date > end_date:
         with _backfill_lock:
             _backfill_state.update(running=False, error=None, progress=0, total=0)
+        cur.close()
         con.close()
         logger.info("Historical backfill: already up to date")
         return
@@ -125,12 +134,13 @@ def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, en
         _backfill_state["total"] = total_days
 
     # Sync log entry
-    con.execute(
+    cur.execute(
         "INSERT INTO sync_log (started_at, job_type, status, date_range_start, date_range_end, station_id) "
-        "VALUES (?, 'historical', 'running', ?, ?, ?)",
+        "VALUES (%s, 'historical', 'running', %s, %s, %s)",
         [started_at, start_date.isoformat(), end_date.isoformat(), station_id],
     )
-    log_id = con.execute("SELECT max(id) FROM sync_log").fetchone()[0]
+    cur.execute("SELECT max(id) FROM sync_log")
+    log_id = cur.fetchone()[0]
 
     # Pre-load dates that already have real data — skip them to save API calls
     existing_dates = get_dates_with_data(station_id, start_date, end_date)
@@ -216,14 +226,15 @@ def _run_backfill(cfg: dict, station_id: str, start_date: date | None = None, en
             _backfill_state["error"] = str(e)
 
     finally:
-        con.execute(
+        cur.execute(
             """UPDATE sync_log
-               SET completed_at=?, status=?,
-                   records_fetched=?, records_inserted=?,
-                   api_calls_made=?, error_message=?
-               WHERE id=?""",
+               SET completed_at=%s, status=%s,
+                   records_fetched=%s, records_inserted=%s,
+                   api_calls_made=%s, error_message=%s
+               WHERE id=%s""",
             [datetime.now(timezone.utc), status, fetched, inserted, api_calls, error_msg, log_id],
         )
+        cur.close()
         con.close()
         with _backfill_lock:
             _backfill_state["running"] = False
@@ -244,10 +255,18 @@ def _upsert_daily(con, record: dict):
         "wind_speed_avg_kmh", "wind_speed_high_kmh", "wind_gust_high_kmh",
         "precip_total_mm",
     ]
-    placeholders = ", ".join(["?"] * len(cols))
+    placeholders = ", ".join(["%s"] * len(cols))
     col_names = ", ".join(cols)
+
+    # Columns to update on conflict (all except PK columns)
+    update_cols = [c for c in cols if c not in ("station_id", "obs_date")]
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+
     values = [record.get(c) for c in cols]
-    con.execute(
-        f"INSERT OR REPLACE INTO daily_observations ({col_names}) VALUES ({placeholders})",
+    cur = con.cursor()
+    cur.execute(
+        f"INSERT INTO daily_observations ({col_names}) VALUES ({placeholders}) "
+        f"ON CONFLICT (station_id, obs_date) DO UPDATE SET {update_clause}",
         values,
     )
+    cur.close()

@@ -33,14 +33,17 @@ def api_rapid_last24h(station_id):
     """Return rapid observations for the last 24 hours (for dashboard sparkline)."""
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT observed_at_local, temp_c, humidity_pct, precip_rate_mmh
                FROM rapid_observations
-               WHERE station_id = ?
+               WHERE station_id = %s
                  AND observed_at >= now() - INTERVAL '24 hours'
                ORDER BY observed_at""",
             [station_id],
-        ).fetchall()
+        )
+        rows = cur.fetchall()
+        cur.close()
         data = [
             {
                 "time": str(r[0]),

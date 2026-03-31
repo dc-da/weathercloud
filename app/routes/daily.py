@@ -18,7 +18,8 @@ def api_rapid(station_id):
 
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT observed_at, observed_at_local,
                       temp_c, heat_index_c, dew_point_c, wind_chill_c,
                       humidity_pct, pressure_hpa,
@@ -26,20 +27,14 @@ def api_rapid(station_id):
                       precip_rate_mmh, precip_total_mm,
                       solar_radiation_wm2, uv_index
                FROM rapid_observations
-               WHERE station_id = ?
-                 AND CAST(observed_at_local AS DATE) = ?
+               WHERE station_id = %s
+                 AND observed_at_local::date = %s
                ORDER BY observed_at""",
             [station_id, date_str],
-        ).fetchall()
-
-        columns = [
-            "observed_at", "observed_at_local",
-            "temp_c", "heat_index_c", "dew_point_c", "wind_chill_c",
-            "humidity_pct", "pressure_hpa",
-            "wind_speed_kmh", "wind_gust_kmh", "wind_dir_deg",
-            "precip_rate_mmh", "precip_total_mm",
-            "solar_radiation_wm2", "uv_index",
-        ]
+        )
+        rows = cur.fetchall()
+        columns = [d[0] for d in cur.description]
+        cur.close()
         data = [dict(zip(columns, [str(v) if v is not None else None for v in row])) for row in rows]
         return jsonify(data)
     finally:
@@ -54,7 +49,8 @@ def api_hourly(station_id):
 
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT observed_at, observed_at_local,
                       temp_c, heat_index_c, dew_point_c, wind_chill_c,
                       humidity_pct, pressure_hpa,
@@ -62,20 +58,14 @@ def api_hourly(station_id):
                       precip_rate_mmh, precip_total_mm,
                       solar_radiation_wm2, uv_index
                FROM hourly_observations
-               WHERE station_id = ?
-                 AND CAST(observed_at_local AS DATE) = ?
+               WHERE station_id = %s
+                 AND observed_at_local::date = %s
                ORDER BY observed_at""",
             [station_id, date_str],
-        ).fetchall()
-
-        columns = [
-            "observed_at", "observed_at_local",
-            "temp_c", "heat_index_c", "dew_point_c", "wind_chill_c",
-            "humidity_pct", "pressure_hpa",
-            "wind_speed_kmh", "wind_gust_kmh", "wind_dir_deg",
-            "precip_rate_mmh", "precip_total_mm",
-            "solar_radiation_wm2", "uv_index",
-        ]
+        )
+        rows = cur.fetchall()
+        columns = [d[0] for d in cur.description]
+        cur.close()
         data = [dict(zip(columns, [str(v) if v is not None else None for v in row])) for row in rows]
         return jsonify(data)
     finally:

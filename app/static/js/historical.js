@@ -115,6 +115,10 @@
 
             const isPrecip = group === "precip_total";
             const yValues = rawData.map((r) => parseNum(r[def.key]));
+
+            // Skip traces where ALL values are null (sensor not available)
+            if (yValues.every((v) => v == null)) return;
+
             const trace = {
                 x: dates,
                 y: yValues,

@@ -19,7 +19,8 @@ def api_daily(station_id):
 
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT obs_date,
                       temp_avg_c, temp_high_c, temp_low_c,
                       humidity_avg_pct, humidity_high_pct, humidity_low_pct,
@@ -29,23 +30,15 @@ def api_daily(station_id):
                       precip_total_mm,
                       COALESCE(data_source, 'station') AS data_source
                FROM daily_observations
-               WHERE station_id = ?
-                 AND obs_date >= ?
-                 AND obs_date <= ?
+               WHERE station_id = %s
+                 AND obs_date >= %s
+                 AND obs_date <= %s
                ORDER BY obs_date""",
             [station_id, date_from, date_to],
-        ).fetchall()
-
-        columns = [
-            "obs_date",
-            "temp_avg_c", "temp_high_c", "temp_low_c",
-            "humidity_avg_pct", "humidity_high_pct", "humidity_low_pct",
-            "dew_point_avg_c", "dew_point_high_c", "dew_point_low_c",
-            "pressure_avg_hpa", "pressure_max_hpa", "pressure_min_hpa",
-            "wind_speed_avg_kmh", "wind_speed_high_kmh", "wind_gust_high_kmh",
-            "precip_total_mm",
-            "data_source",
-        ]
+        )
+        rows = cur.fetchall()
+        columns = [d[0] for d in cur.description]
+        cur.close()
         data = [dict(zip(columns, [str(v) if v is not None else None for v in row])) for row in rows]
         return jsonify(data)
     finally:

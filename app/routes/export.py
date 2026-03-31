@@ -12,15 +12,16 @@ def _query_data(source: str, date_from: str, date_to: str, station_id: str) -> p
     table = "rapid_observations" if source == "rapid" else "hourly_observations"
     con = get_connection()
     try:
-        df = con.execute(
+        df = pd.read_sql(
             f"""SELECT *
                 FROM {table}
-                WHERE station_id = ?
-                  AND CAST(observed_at_local AS DATE) >= ?
-                  AND CAST(observed_at_local AS DATE) <= ?
+                WHERE station_id = %s
+                  AND observed_at_local::date >= %s
+                  AND observed_at_local::date <= %s
                 ORDER BY observed_at""",
-            [station_id, date_from, date_to],
-        ).fetchdf()
+            con,
+            params=[station_id, date_from, date_to],
+        )
         return df
     finally:
         con.close()
@@ -29,15 +30,16 @@ def _query_data(source: str, date_from: str, date_to: str, station_id: str) -> p
 def _query_daily(date_from: str, date_to: str, station_id: str) -> pd.DataFrame:
     con = get_connection()
     try:
-        df = con.execute(
+        df = pd.read_sql(
             """SELECT *
                FROM daily_observations
-               WHERE station_id = ?
-                 AND obs_date >= ?
-                 AND obs_date <= ?
+               WHERE station_id = %s
+                 AND obs_date >= %s
+                 AND obs_date <= %s
                ORDER BY obs_date""",
-            [station_id, date_from, date_to],
-        ).fetchdf()
+            con,
+            params=[station_id, date_from, date_to],
+        )
         return df
     finally:
         con.close()

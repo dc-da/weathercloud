@@ -66,23 +66,25 @@ def get_gap_fill_stations(primary_station_id: str, cfg: dict) -> list[dict]:
 
     con = get_connection()
     try:
-        # Get primary station coords
-        primary = con.execute(
-            "SELECT latitude, longitude FROM station_registry WHERE station_id = ?",
+        cur = con.cursor()
+        cur.execute(
+            "SELECT latitude, longitude FROM station_registry WHERE station_id = %s",
             [primary_station_id],
-        ).fetchone()
+        )
+        primary = cur.fetchone()
         if not primary or primary[0] is None:
+            cur.close()
             return []
 
         p_lat, p_lon = primary
 
-        # Get gap-fill station coords
         result = []
         for sid in gap_fill_ids:
-            row = con.execute(
-                "SELECT latitude, longitude, name, neighborhood FROM station_registry WHERE station_id = ?",
+            cur.execute(
+                "SELECT latitude, longitude, name, neighborhood FROM station_registry WHERE station_id = %s",
                 [sid],
-            ).fetchone()
+            )
+            row = cur.fetchone()
             if not row or row[0] is None:
                 continue
 
@@ -90,7 +92,6 @@ def get_gap_fill_stations(primary_station_id: str, cfg: dict) -> list[dict]:
             dist = haversine_km(p_lat, p_lon, s_lat, s_lon)
             sc = score_station(dist)
 
-            # Find display name from config
             station_cfg = next((s for s in stations if s["id"] == sid), {})
 
             result.append({
@@ -102,6 +103,7 @@ def get_gap_fill_stations(primary_station_id: str, cfg: dict) -> list[dict]:
                 "score": round(sc, 1),
             })
 
+        cur.close()
         result.sort(key=lambda s: s["distance_km"])
         return result
     finally:
@@ -116,23 +118,23 @@ def find_missing_days(primary_station_id: str) -> list[str]:
     """Find days where the primary station has NULL data (or no row)."""
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT obs_date FROM daily_observations
-               WHERE station_id = ?
+               WHERE station_id = %s
                  AND temp_avg_c IS NULL
                ORDER BY obs_date""",
             [primary_station_id],
-        ).fetchall()
+        )
+        rows = cur.fetchall()
+        cur.close()
         return [str(r[0])[:10] for r in rows]
     finally:
         con.close()
 
 
 def run_gap_fill(primary_station_id: str, cfg: dict) -> dict:
-    """Execute gap-fill for all missing days on the primary station.
-
-    Returns a summary dict with counts and details.
-    """
+    """Execute gap-fill for all missing days on the primary station."""
     scored_stations = get_gap_fill_stations(primary_station_id, cfg)
     usable = [s for s in scored_stations if s["score"] > 0]
 
@@ -163,8 +165,9 @@ def run_gap_fill(primary_station_id: str, cfg: dict) -> dict:
 
     con = get_connection()
     try:
+        cur = con.cursor()
         for day in missing_days:
-            record = _compute_weighted_day(con, day, station_ids, weights)
+            record = _compute_weighted_day(cur, day, station_ids, weights)
             if record is None:
                 days_unfillable += 1
                 continue
@@ -172,9 +175,10 @@ def run_gap_fill(primary_station_id: str, cfg: dict) -> dict:
             record["station_id"] = primary_station_id
             record["obs_date"] = day
             record["data_source"] = "gap_fill"
-            _upsert_gap_fill_record(con, record)
+            _upsert_gap_fill_record(cur, record)
             days_filled += 1
 
+        cur.close()
     finally:
         con.close()
 
@@ -190,29 +194,28 @@ def run_gap_fill(primary_station_id: str, cfg: dict) -> dict:
     }
 
 
-def _compute_weighted_day(con, day: str, station_ids: list[str],
+def _compute_weighted_day(cur, day: str, station_ids: list[str],
                           weights: dict[str, float]) -> dict | None:
     """Compute weighted average for a single day from multiple stations."""
-    # Fetch data for this day from all gap-fill stations
-    placeholders = ", ".join(["?"] * len(station_ids))
+    placeholders = ", ".join(["%s"] * len(station_ids))
     cols = ", ".join(ALL_FIELDS)
-    rows = con.execute(
+    cur.execute(
         f"""SELECT station_id, {cols}
             FROM daily_observations
-            WHERE obs_date = ?
+            WHERE obs_date = %s
               AND station_id IN ({placeholders})
               AND temp_avg_c IS NOT NULL""",
         [day] + station_ids,
-    ).fetchall()
+    )
+    rows = cur.fetchall()
 
     if not rows:
         return None
 
-    # Build per-field weighted values
     result = {}
 
     for field_idx, field in enumerate(ALL_FIELDS):
-        col_idx = field_idx + 1  # offset for station_id at position 0
+        col_idx = field_idx + 1
         values_weights = []
         for row in rows:
             val = row[col_idx]
@@ -225,25 +228,22 @@ def _compute_weighted_day(con, day: str, station_ids: list[str],
             continue
 
         if field in MAX_FIELDS:
-            # Use max for precipitation
             result[field] = max(v for v, _ in values_weights)
         else:
-            # Weighted average
             total_weight = sum(w for _, w in values_weights)
             if total_weight > 0:
                 result[field] = sum(v * w for v, w in values_weights) / total_weight
             else:
                 result[field] = None
 
-    # Only return if we got at least some fields
     if all(v is None for v in result.values()):
         return None
 
     return result
 
 
-def _upsert_gap_fill_record(con, record: dict):
-    """Insert or replace a gap-filled daily record."""
+def _upsert_gap_fill_record(cur, record: dict):
+    """Insert or update a gap-filled daily record."""
     cols = [
         "station_id", "obs_date", "data_source",
         "temp_avg_c", "temp_high_c", "temp_low_c",
@@ -253,11 +253,14 @@ def _upsert_gap_fill_record(con, record: dict):
         "wind_speed_avg_kmh", "wind_speed_high_kmh", "wind_gust_high_kmh",
         "precip_total_mm",
     ]
-    placeholders = ", ".join(["?"] * len(cols))
+    placeholders = ", ".join(["%s"] * len(cols))
     col_names = ", ".join(cols)
+    update_cols = [c for c in cols if c not in ("station_id", "obs_date")]
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
     values = [record.get(c) for c in cols]
-    con.execute(
-        f"INSERT OR REPLACE INTO daily_observations ({col_names}) VALUES ({placeholders})",
+    cur.execute(
+        f"INSERT INTO daily_observations ({col_names}) VALUES ({placeholders}) "
+        f"ON CONFLICT (station_id, obs_date) DO UPDATE SET {update_clause}",
         values,
     )
 
@@ -271,13 +274,15 @@ def get_gap_fill_summary(primary_station_id: str, cfg: dict) -> dict:
     scored = get_gap_fill_stations(primary_station_id, cfg)
     missing = find_missing_days(primary_station_id)
 
-    # Count existing gap-filled records
     con = get_connection()
     try:
-        filled_count = con.execute(
-            "SELECT COUNT(*) FROM daily_observations WHERE station_id = ? AND data_source = 'gap_fill'",
+        cur = con.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM daily_observations WHERE station_id = %s AND data_source = 'gap_fill'",
             [primary_station_id],
-        ).fetchone()[0]
+        )
+        filled_count = cur.fetchone()[0]
+        cur.close()
     finally:
         con.close()
 
@@ -285,5 +290,5 @@ def get_gap_fill_summary(primary_station_id: str, cfg: dict) -> dict:
         "stations": scored,
         "missing_days_count": len(missing),
         "gap_filled_count": filled_count,
-        "missing_days_sample": missing[:30],  # first 30 for preview
+        "missing_days_sample": missing[:30],
     }

@@ -41,7 +41,6 @@ def api_sync_historical_start(station_id):
         except ValueError:
             return jsonify({"error": "Invalid end_date format (use YYYY-MM-DD)"}), 400
 
-    # If no start_date and no existing data, require it
     if start_date is None:
         last = get_last_synced_date(station_id)
         if last is None:
@@ -173,24 +172,21 @@ def api_sync_log(station_id):
     limit = request.args.get("limit", 50, type=int)
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT id, started_at, completed_at, job_type, status,
                       records_fetched, records_inserted, records_updated,
                       date_range_start, date_range_end, error_message, api_calls_made,
                       station_id
                FROM sync_log
-               WHERE station_id = ? OR station_id IS NULL
+               WHERE station_id = %s OR station_id IS NULL
                ORDER BY started_at DESC
-               LIMIT ?""",
+               LIMIT %s""",
             [station_id, limit],
-        ).fetchall()
-
-        columns = [
-            "id", "started_at", "completed_at", "job_type", "status",
-            "records_fetched", "records_inserted", "records_updated",
-            "date_range_start", "date_range_end", "error_message", "api_calls_made",
-            "station_id",
-        ]
+        )
+        rows = cur.fetchall()
+        columns = [d[0] for d in cur.description]
+        cur.close()
         data = [dict(zip(columns, [str(v) if v is not None else None for v in row])) for row in rows]
         return jsonify(data)
     finally:

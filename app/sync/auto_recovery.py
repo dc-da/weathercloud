@@ -31,35 +31,46 @@ API_CALL_DELAY = 5  # seconds between API calls
 def _get_queue_entry(station_id: str) -> dict | None:
     con = get_connection()
     try:
-        row = con.execute(
-            "SELECT * FROM recovery_queue WHERE station_id = ?", [station_id]
-        ).fetchone()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT * FROM recovery_queue WHERE station_id = %s", [station_id]
+        )
+        row = cur.fetchone()
         if not row:
+            cur.close()
             return None
-        cols = [d[0] for d in con.description]
+        cols = [d[0] for d in cur.description]
+        cur.close()
         return dict(zip(cols, row))
     finally:
         con.close()
 
 
 def _upsert_queue(station_id: str, **fields):
+    # Rename current_date -> recovery_current_date for the DB column
+    if "current_date" in fields:
+        fields["recovery_current_date"] = fields.pop("current_date")
+
     con = get_connection()
     try:
-        existing = con.execute(
-            "SELECT 1 FROM recovery_queue WHERE station_id = ?", [station_id]
-        ).fetchone()
+        cur = con.cursor()
+        cur.execute(
+            "SELECT 1 FROM recovery_queue WHERE station_id = %s", [station_id]
+        )
+        existing = cur.fetchone()
         if existing:
-            sets = ", ".join(f"{k} = ?" for k in fields)
+            sets = ", ".join(f"{k} = %s" for k in fields)
             vals = list(fields.values()) + [station_id]
-            con.execute(f"UPDATE recovery_queue SET {sets} WHERE station_id = ?", vals)
+            cur.execute(f"UPDATE recovery_queue SET {sets} WHERE station_id = %s", vals)
         else:
             fields["station_id"] = station_id
             cols = ", ".join(fields.keys())
-            placeholders = ", ".join(["?"] * len(fields))
-            con.execute(
+            placeholders = ", ".join(["%s"] * len(fields))
+            cur.execute(
                 f"INSERT INTO recovery_queue ({cols}) VALUES ({placeholders})",
                 list(fields.values()),
             )
+        cur.close()
     finally:
         con.close()
 
@@ -67,8 +78,11 @@ def _upsert_queue(station_id: str, **fields):
 def _get_all_queue_entries() -> list[dict]:
     con = get_connection()
     try:
-        rows = con.execute("SELECT * FROM recovery_queue ORDER BY created_at").fetchall()
-        cols = [d[0] for d in con.description]
+        cur = con.cursor()
+        cur.execute("SELECT * FROM recovery_queue ORDER BY created_at")
+        rows = cur.fetchall()
+        cols = [d[0] for d in cur.description]
+        cur.close()
         return [dict(zip(cols, r)) for r in rows]
     finally:
         con.close()
@@ -77,11 +91,14 @@ def _get_all_queue_entries() -> list[dict]:
 def _insert_recovery_log(run_date: date) -> int:
     con = get_connection()
     try:
-        con.execute(
-            "INSERT INTO recovery_log (run_date, started_at, status) VALUES (?, ?, 'running')",
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO recovery_log (run_date, started_at, status) VALUES (%s, %s, 'running')",
             [run_date, datetime.now(timezone.utc)],
         )
-        log_id = con.execute("SELECT max(id) FROM recovery_log").fetchone()[0]
+        cur.execute("SELECT max(id) FROM recovery_log")
+        log_id = cur.fetchone()[0]
+        cur.close()
         return log_id
     finally:
         con.close()
@@ -90,15 +107,17 @@ def _insert_recovery_log(run_date: date) -> int:
 def _update_recovery_log(log_id: int, **fields):
     con = get_connection()
     try:
-        sets = ", ".join(f"{k} = ?" for k in fields)
+        cur = con.cursor()
+        sets = ", ".join(f"{k} = %s" for k in fields)
         vals = list(fields.values()) + [log_id]
-        con.execute(f"UPDATE recovery_log SET {sets} WHERE id = ?", vals)
+        cur.execute(f"UPDATE recovery_log SET {sets} WHERE id = %s", vals)
+        cur.close()
     finally:
         con.close()
 
 
 def _upsert_daily_record(record: dict):
-    """Insert or replace a single daily observation — short-lived connection."""
+    """Insert or update a single daily observation — short-lived connection."""
     con = get_connection()
     try:
         cols = [
@@ -110,13 +129,21 @@ def _upsert_daily_record(record: dict):
             "wind_speed_avg_kmh", "wind_speed_high_kmh", "wind_gust_high_kmh",
             "precip_total_mm",
         ]
-        placeholders = ", ".join(["?"] * len(cols))
+        placeholders = ", ".join(["%s"] * len(cols))
         col_names = ", ".join(cols)
+
+        # Columns to update on conflict (all except PK columns)
+        update_cols = [c for c in cols if c not in ("station_id", "obs_date")]
+        update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+
         values = [record.get(c) for c in cols]
-        con.execute(
-            f"INSERT OR REPLACE INTO daily_observations ({col_names}) VALUES ({placeholders})",
+        cur = con.cursor()
+        cur.execute(
+            f"INSERT INTO daily_observations ({col_names}) VALUES ({placeholders}) "
+            f"ON CONFLICT (station_id, obs_date) DO UPDATE SET {update_clause}",
             values,
         )
+        cur.close()
     finally:
         con.close()
 
@@ -125,12 +152,15 @@ def _get_existing_data_dates(station_id: str, start: date, end: date) -> set[str
     """Return set of ISO date strings with real (non-null) data."""
     con = get_connection()
     try:
-        rows = con.execute(
+        cur = con.cursor()
+        cur.execute(
             """SELECT obs_date FROM daily_observations
-               WHERE station_id = ? AND obs_date >= ? AND obs_date <= ?
+               WHERE station_id = %s AND obs_date >= %s AND obs_date <= %s
                AND temp_avg_c IS NOT NULL""",
             [station_id, start.isoformat(), end.isoformat()],
-        ).fetchall()
+        )
+        rows = cur.fetchall()
+        cur.close()
         return {str(r[0])[:10] for r in rows}
     finally:
         con.close()
@@ -321,10 +351,12 @@ def _fix_stale_entries():
     """Reset entries stuck in 'in_progress' or 'detecting' from a crashed run."""
     con = get_connection()
     try:
-        con.execute(
+        cur = con.cursor()
+        cur.execute(
             "UPDATE recovery_queue SET status = 'paused' "
             "WHERE status IN ('in_progress', 'detecting')"
         )
+        cur.close()
     finally:
         con.close()
 
@@ -386,7 +418,7 @@ def _process_station(client: WUClient, cfg: dict, entry: dict, budget: int) -> t
     Returns (api_calls, days_recovered, days_skipped).
     """
     sid = entry["station_id"]
-    current = entry["current_date"]
+    current = entry.get("recovery_current_date") or entry.get("current_date")
     end = entry["end_date"]
 
     if isinstance(current, str):
@@ -476,10 +508,13 @@ def get_recovery_status() -> dict:
 
     con = get_connection()
     try:
-        logs = con.execute(
+        cur = con.cursor()
+        cur.execute(
             "SELECT * FROM recovery_log ORDER BY started_at DESC LIMIT 20"
-        ).fetchall()
-        log_cols = [d[0] for d in con.description]
+        )
+        logs = cur.fetchall()
+        log_cols = [d[0] for d in cur.description]
+        cur.close()
         log_list = [dict(zip(log_cols, r)) for r in logs]
     finally:
         con.close()

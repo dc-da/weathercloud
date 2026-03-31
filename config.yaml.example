@@ -17,9 +17,14 @@ wu:
       name: "Udine Nord"
       use_for_gap_fill: false
 
-# Database
+# Database (PostgreSQL)
 database:
-  path: "data/weather.duckdb"
+  host: "localhost"
+  port: 5432
+  name: "weathercloud"
+  user: "weather"
+  password: "weather"
+  schema: "weather"
 
 # API Base URLs
 api:

@@ -19,12 +19,8 @@ def create_app():
     cfg = load_config()
     app.config["WS"] = cfg
 
-    # Ensure data directory exists
-    db_path = cfg["database"]["path"]
-    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
-
-    # Initialize database schema
-    init_db(db_path)
+    # Initialize database connection
+    init_db(cfg["database"])
 
     # Register blueprints (all station-scoped under /station/<station_id>)
     from .routes.dashboard import bp as dashboard_bp
@@ -36,6 +32,7 @@ def create_app():
     from .routes.home import bp as home_bp
     from .routes.recovery import bp as recovery_bp
     from .routes.gap_fill import bp as gap_fill_bp
+    from .routes.forecast import bp as forecast_bp
 
     prefix = "/station/<station_id>"
     app.register_blueprint(home_bp)
@@ -47,6 +44,7 @@ def create_app():
     app.register_blueprint(sync_bp, url_prefix=prefix)
     app.register_blueprint(export_bp, url_prefix=prefix)
     app.register_blueprint(gap_fill_bp, url_prefix=prefix)
+    app.register_blueprint(forecast_bp, url_prefix=prefix)
 
     # ---- before_request: validate station_id for /station/<id>/ routes ----
     @app.before_request

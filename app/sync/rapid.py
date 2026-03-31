@@ -12,22 +12,25 @@ def sync_rapid(cfg: dict, station_id: str):
     """Fetch rapid (5-min) observations for the last 24h and upsert into DB."""
     client = WUClient(cfg)
     con = get_connection()
+    cur = con.cursor()
     started_at = datetime.now(timezone.utc)
 
     # Create sync log entry
-    con.execute(
-        "INSERT INTO sync_log (started_at, job_type, status, station_id) VALUES (?, 'rapid', 'running', ?)",
+    cur.execute(
+        "INSERT INTO sync_log (started_at, job_type, status, station_id) VALUES (%s, 'rapid', 'running', %s)",
         [started_at, station_id],
     )
-    log_id = con.execute("SELECT max(id) FROM sync_log").fetchone()[0]
+    cur.execute("SELECT max(id) FROM sync_log")
+    log_id = cur.fetchone()[0]
 
     try:
         observations = client.get_rapid_history_1day(station_id)
         if not observations:
-            con.execute(
-                "UPDATE sync_log SET completed_at=?, status='success', records_fetched=0, api_calls_made=1 WHERE id=?",
+            cur.execute(
+                "UPDATE sync_log SET completed_at=%s, status='success', records_fetched=0, api_calls_made=1 WHERE id=%s",
                 [datetime.now(timezone.utc), log_id],
             )
+            cur.close()
             con.close()
             logger.info("Rapid sync: no data returned")
             return
@@ -41,12 +44,12 @@ def sync_rapid(cfg: dict, station_id: str):
 
         inserted = _upsert_records(con, records)
 
-        con.execute(
+        cur.execute(
             """UPDATE sync_log
-               SET completed_at=?, status='success',
-                   records_fetched=?, records_inserted=?, api_calls_made=1,
-                   date_range_start=?, date_range_end=?
-               WHERE id=?""",
+               SET completed_at=%s, status='success',
+                   records_fetched=%s, records_inserted=%s, api_calls_made=1,
+                   date_range_start=%s, date_range_end=%s
+               WHERE id=%s""",
             [
                 datetime.now(timezone.utc),
                 len(observations),
@@ -60,11 +63,12 @@ def sync_rapid(cfg: dict, station_id: str):
 
     except Exception as e:
         logger.exception("Rapid sync failed")
-        con.execute(
-            "UPDATE sync_log SET completed_at=?, status='error', error_message=?, api_calls_made=1 WHERE id=?",
+        cur.execute(
+            "UPDATE sync_log SET completed_at=%s, status='error', error_message=%s, api_calls_made=1 WHERE id=%s",
             [datetime.now(timezone.utc), str(e), log_id],
         )
     finally:
+        cur.close()
         con.close()
 
 
@@ -124,16 +128,24 @@ def _upsert_records(con, records: list[dict]) -> int:
         "precip_rate_mmh", "precip_total_mm",
         "solar_radiation_wm2", "uv_index",
     ]
-    placeholders = ", ".join(["?"] * len(cols))
+    placeholders = ", ".join(["%s"] * len(cols))
     col_names = ", ".join(cols)
 
+    # Columns to update on conflict (all except PK columns)
+    update_cols = [c for c in cols if c not in ("station_id", "observed_at")]
+    update_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+
+    sql = (
+        f"INSERT INTO rapid_observations ({col_names}) VALUES ({placeholders}) "
+        f"ON CONFLICT (station_id, observed_at) DO UPDATE SET {update_clause}"
+    )
+
+    cur = con.cursor()
     count = 0
     for r in records:
         values = [r.get(c) for c in cols]
-        con.execute(
-            f"INSERT OR REPLACE INTO rapid_observations ({col_names}) VALUES ({placeholders})",
-            values,
-        )
+        cur.execute(sql, values)
         count += 1
+    cur.close()
 
     return count

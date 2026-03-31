@@ -9,10 +9,11 @@ WeatherStation PWS — a Python/Flask web app for monitoring, storing, and analy
 ## Tech Stack
 
 - **Backend:** Python 3.13 / Flask
-- **Database:** DuckDB (embedded, single file at `data/weather.duckdb`)
+- **Database:** PostgreSQL 16+ (schema `weather` in database `weathercloud`, user `weather`)
+- **DB Driver:** psycopg2 (`psycopg2-binary`)
 - **Frontend:** HTML5/CSS3/JS with Plotly.js (charts) and DataTables.js (tables), dark Anthracite theme
 - **Scheduler:** APScheduler (integrated in Flask)
-- **Config:** YAML (`config.yaml`) — contains API keys, must be in `.gitignore`
+- **Config:** YAML (`config.yaml`) — contains API keys and DB credentials, must be in `.gitignore`
 
 ## Development Setup
 
@@ -22,7 +23,45 @@ pip install -r requirements.txt
 python run.py
 ```
 
-The app runs on `http://0.0.0.0:5001` by default. On first run, it creates the DuckDB database and tables automatically.
+PostgreSQL must be running with database `weathercloud`, schema `weather`, user `weather`.
+Schema creation: `scripts/pg_setup.sql` (as superuser), then `scripts/pg_schema.sql` (as weather user).
+The app runs on `http://0.0.0.0:5001` by default.
+
+## Database
+
+- **Engine:** PostgreSQL with dedicated schema `weather` (not `public`)
+- **Connection:** psycopg2 with `autocommit=True` and `search_path=weather` set via connection options
+- **Driver pattern:** `get_connection()` returns a new connection each time; callers use `cur = con.cursor()` for all queries
+- **Upserts:** `INSERT ... ON CONFLICT (pk_cols) DO UPDATE SET col = EXCLUDED.col` (PostgreSQL native)
+- **Placeholders:** `%s` (psycopg2 style, NOT `?`)
+- **Casting:** `column::date` for date casts (PostgreSQL style, NOT `CAST(x AS DATE)`)
+- **Schema script:** `scripts/pg_schema.sql` — all tables, indexes, sequences
+- **Migration from DuckDB:** `scripts/migrate_duckdb_to_pg.py` (one-time, historical)
+- **Reserved word:** `current_date` is reserved in PostgreSQL — the recovery_queue column is named `recovery_current_date`
+
+### Config
+
+```yaml
+database:
+  host: "localhost"
+  port: 5432
+  name: "weathercloud"
+  user: "weather"
+  password: "weather"
+  schema: "weather"
+```
+
+### Tables
+
+| Table | Purpose |
+|---|---|
+| `rapid_observations` | 5-min data, PK: `(station_id, observed_at)` |
+| `hourly_observations` | Hourly data, PK: `(station_id, observed_at)` |
+| `daily_observations` | Daily summaries, PK: `(station_id, obs_date)`. Has `data_source` column (`'station'` or `'gap_fill'`) |
+| `station_registry` | Cached lat/lon/metadata per station, populated from API current conditions |
+| `sync_log` | Log of all sync operations (SERIAL PK) |
+| `recovery_queue` | Tracks autonomous recovery state per station |
+| `recovery_log` | Daily auto-recovery run history (SERIAL PK) |
 
 ## Architecture
 
@@ -31,7 +70,7 @@ The project follows a Flask app-factory pattern with multi-station support:
 - `run.py` — entry point
 - `app/__init__.py` — Flask app factory, `before_request` station validation, `context_processor`, legacy URL redirects
 - `app/config.py` — loads `config.yaml`, normalizes legacy single-station format, provides `get_all_stations()`, `get_station_by_id()`, `get_primary_station_id()`
-- `app/database.py` — DuckDB connection, schema init, `upsert_station_registry()`, `get_station_registry()`
+- `app/database.py` — PostgreSQL connection (`psycopg2`), `upsert_station_registry()`, `get_station_registry()`
 - `app/models.py` — API-to-DB field mapping (extracts lat/lon from current conditions)
 - `app/api_client.py` — Weather Underground API client (`station_id` passed per-method, not stored in constructor)
 - `app/scheduler.py` — APScheduler: rapid sync, hourly sync, daily auto-recovery jobs
@@ -45,21 +84,10 @@ The project follows a Flask app-factory pattern with multi-station support:
   - `home.py` — homepage (`/`) and `/api/stations/current` (also populates `station_registry`)
   - `recovery.py` — recovery recap page (`/recovery`) and `/api/recovery/*`
   - `gap_fill.py` — gap-fill page and API (`/station/<id>/gap-fill`, primary station only)
+  - `forecast.py` — 5-day forecast page and API (`/station/<id>/forecast`)
   - `dashboard.py`, `daily.py`, `historical.py`, `reports.py`, `sync_api.py`, `export.py` — station-scoped under `/station/<station_id>/`
 - `app/templates/` — Jinja2 templates
 - `app/static/` — CSS (Anthracite theme) and JS assets
-
-## Database Tables
-
-| Table | Purpose |
-|---|---|
-| `rapid_observations` | 5-min data, PK: `(station_id, observed_at)` |
-| `hourly_observations` | Hourly data, PK: `(station_id, observed_at)` |
-| `daily_observations` | Daily summaries, PK: `(station_id, obs_date)`. Has `data_source` column (`'station'` or `'gap_fill'`) |
-| `station_registry` | Cached lat/lon/metadata per station, populated from API current conditions |
-| `sync_log` | Log of all sync operations (rapid, hourly, historical) |
-| `recovery_queue` | Tracks autonomous recovery state per station |
-| `recovery_log` | Daily auto-recovery run history |
 
 ## Multi-Station Config
 
@@ -91,6 +119,7 @@ Legacy format (`wu.station_id` as flat string) is auto-normalized at load time.
 - `/station/<station_id>/historical` — per-station historical data + manual backfill (all daily fields visible in table and chart, gap-filled rows highlighted in amber)
 - `/station/<station_id>/reports` — per-station reports
 - `/station/<station_id>/sync-status` — per-station sync status
+- `/station/<station_id>/forecast` — 5-day weather forecast (uses lat/lon from `station_registry`, calls WU v3 forecast API)
 - `/station/<station_id>/gap-fill` — gap-fill page (primary station only)
 - `/recovery` — global auto-recovery status page
 - Legacy URLs (`/dashboard`, `/daily`, etc.) redirect to the primary station (301)
@@ -99,13 +128,14 @@ All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to p
 
 ## Key Data Flow
 
-1. **Sync jobs** fetch data from WU APIs for all configured stations and store in DuckDB tables. Jobs use INSERT OR REPLACE for idempotent upserts.
+1. **Sync jobs** fetch data from WU APIs for all configured stations and store in PostgreSQL tables. Jobs use `INSERT ... ON CONFLICT ... DO UPDATE` for idempotent upserts.
 2. **Missing timestamps** are filled with NULL-valued rows to preserve time grids (5-min for rapid, 1-hour for hourly, daily for historical).
-3. **Frontend views** call `/station/<id>/api/*` JSON endpoints which query DuckDB directly. The dashboard proxies live data from the WU API.
+3. **Frontend views** call `/station/<id>/api/*` JSON endpoints which query PostgreSQL directly. The dashboard proxies live data from the WU API.
 4. **Station registry** is populated automatically whenever current conditions are fetched (homepage or dashboard). Stores lat/lon for distance calculations.
 5. **Historical backfill** (manual) is user-triggered per station, iterates day-by-day with 5s delay, skips days already in DB, and has a 1300-call daily limit. Reports progress via SSE.
 6. **Auto-recovery** runs daily (configurable, default 03:00), processes all stations autonomously within a 1000-call budget. State is persisted in `recovery_queue` table. Primary station gets priority.
-7. **Gap-fill** reconstructs missing daily data on the primary station using distance-weighted averages from secondary stations marked `use_for_gap_fill: true`. Uses Haversine distance for scoring (100 - km*5). Precipitation uses max instead of average. Zero API calls — pure DB operations. Records are marked with `data_source='gap_fill'`.
+7. **Forecast** fetches 5-day daily forecast from WU v3 API using station lat/lon from the registry. Returns day/night split with temp, precip chance, wind, humidity, UV, cloud cover, moon phase, sunrise/sunset. WU icon codes mapped to Bootstrap Icons.
+8. **Gap-fill** reconstructs missing daily data on the primary station using distance-weighted averages from secondary stations marked `use_for_gap_fill: true`. Uses Haversine distance for scoring (100 - km*5). Precipitation uses max instead of average. Zero API calls — pure DB operations. Records are marked with `data_source='gap_fill'`.
 
 ## Gap-Fill Details
 
@@ -125,10 +155,29 @@ All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to p
 
 ## Important Conventions
 
-- All timestamps in DB are UTC; local timestamps stored separately in `observed_at_local`.
+- All timestamps in DB are UTC (`TIMESTAMPTZ`); local timestamps stored separately in `observed_at_local`.
 - All DB tables have `station_id` in their primary key — data from different stations coexists safely.
 - API field names vary between rapid/hourly/current responses — mapping must handle both variants with fallbacks (see spec "Mapping Campi API → Database").
 - All API fields are displayed raw in tables (no aggregations outside reports tab).
 - The spec is written in Italian; code and comments should be in English.
 - `config.yaml` must never be committed. Use `config.yaml.example` as template.
-- DB connections in `auto_recovery.py` and `gap_fill.py` are opened and closed per operation to avoid blocking rapid/hourly sync.
+- DB connections use `autocommit=True` — no explicit `commit()` needed. Short-lived connections (open-query-close) in background jobs to avoid contention.
+
+## Known PostgreSQL Pitfalls
+
+- **`current_date` is reserved** — cannot be used as a column name. The recovery_queue column is `recovery_current_date`. The `_upsert_queue()` function in `auto_recovery.py` remaps `current_date` → `recovery_current_date` automatically.
+- **Schema isolation** — all tables live in schema `weather`, not `public`. Connection sets `search_path=weather` via options. The schema must be created by a superuser first (`scripts/pg_setup.sql`).
+- **`%s` placeholders** — psycopg2 uses `%s` for all parameter types (not `?` like DuckDB/sqlite). Never use f-strings for user values.
+- **`INSERT ... ON CONFLICT`** — replaces DuckDB's `INSERT OR REPLACE`. Requires explicit PK columns and `EXCLUDED.col` references.
+
+## Frontend Pitfalls
+
+- **DataTables column count** — The number of `<th>` elements in the HTML `<thead>` MUST match the number of columns in the JS `TABLE_COLUMNS` array, or the table silently fails to render.
+- **Plotly all-null traces** — A trace where every y-value is `null` can break axis scaling. Always filter: `if (yValues.every(v => v == null)) return;` before adding a trace.
+
+## Homepage Layout
+
+- **Primary station**: full-width card (`col-12`) with hero temperature + all metrics in grid with colored icons
+- **Secondary stations**: compact cards (`col-xl-3`) sorted by online status then distance from primary (Haversine)
+- **Offline stations**: faded (opacity 0.45), grouped at bottom
+- **Search bar**: filters by station name or ID in real-time

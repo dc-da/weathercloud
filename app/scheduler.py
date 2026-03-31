@@ -132,11 +132,11 @@ def _maybe_run_recovery_on_startup(cfg: dict):
     today = date.today()
     con = get_connection()
     try:
-        row = con.execute(
-            "SELECT 1 FROM recovery_log WHERE run_date = ?", [today]
-        ).fetchone()
+        cur = con.cursor()
+        cur.execute("SELECT 1 FROM recovery_log WHERE run_date = %s", [today])
+        row = cur.fetchone()
+        cur.close()
     except Exception:
-        # Table might not exist yet on first run — that's fine
         row = None
     finally:
         con.close()

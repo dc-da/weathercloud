@@ -142,9 +142,14 @@
             const defs = METRIC_MAP[group];
             if (!defs) return;
             defs.forEach((def) => {
+                const yValues = rawData.map((r) => parseNum(r[def.key]));
+
+                // Skip traces where ALL values are null (sensor not available)
+                if (yValues.every((v) => v == null)) return;
+
                 const trace = {
                     x: times,
-                    y: rawData.map((r) => parseNum(r[def.key])),
+                    y: yValues,
                     name: def.label,
                     connectgaps: false,
                     yaxis: def.yaxis,
