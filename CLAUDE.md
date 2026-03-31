@@ -72,7 +72,7 @@ The project follows a Flask app-factory pattern with multi-station support:
 - `app/config.py` — loads `config.yaml`, normalizes legacy single-station format, provides `get_all_stations()`, `get_station_by_id()`, `get_primary_station_id()`
 - `app/database.py` — PostgreSQL connection (`psycopg2`), `upsert_station_registry()`, `get_station_registry()`
 - `app/models.py` — API-to-DB field mapping (extracts lat/lon from current conditions)
-- `app/api_client.py` — Weather Underground API client (`station_id` passed per-method, not stored in constructor)
+- `app/api_client.py` — Weather Underground API client (`station_id` passed per-method, not stored in constructor). Uses `requests.Session` with `User-Agent` header to avoid WU API key invalidation.
 - `app/scheduler.py` — APScheduler: rapid sync, hourly sync, daily auto-recovery jobs
 - `app/sync/` — sync modules:
   - `rapid.py` — 5-min observations (every 4h, all stations)
@@ -81,7 +81,7 @@ The project follows a Flask app-factory pattern with multi-station support:
   - `auto_recovery.py` — autonomous daily historical recovery for all stations
   - `gap_fill.py` — fills missing daily data on primary station using distance-weighted averages from secondary stations
 - `app/routes/` — Flask route blueprints:
-  - `home.py` — homepage (`/`) and `/api/stations/current` (also populates `station_registry`)
+  - `home.py` — homepage (`/`), `/api/stations/current` (batch JSON), and `/api/stations/stream` (SSE progressive loading). Also populates `station_registry`.
   - `recovery.py` — recovery recap page (`/recovery`) and `/api/recovery/*`
   - `gap_fill.py` — gap-fill page and API (`/station/<id>/gap-fill`, primary station only)
   - `forecast.py` — 5-day forecast page and API (`/station/<id>/forecast`)
@@ -124,7 +124,7 @@ Legacy format (`wu.station_id` as flat string) is auto-normalized at load time.
 - `/recovery` — global auto-recovery status page
 - Legacy URLs (`/dashboard`, `/daily`, etc.) redirect to the primary station (301)
 
-All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to prefix API calls.
+All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to prefix API calls. The homepage also injects `window.WS_STATIONS` (station list from config) for placeholder rendering before API data arrives.
 
 ## Key Data Flow
 
@@ -148,10 +148,11 @@ All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to p
 ## WU API Rate Limits
 
 - 30 calls/minute, 1500 calls/day
-- Sync delay: 5s between historical API calls
+- **5s delay between all consecutive API calls** (homepage refresh, scheduler sync, historical backfill) — mandatory to avoid rate-limit blocks and API key invalidation
 - Manual backfill budget: 1300 calls/day
 - Auto-recovery budget: configurable (default 1000 calls/day)
 - Rapid/hourly sync: ~1 call per station per run (negligible)
+- **User-Agent header required** — WU blocks/invalidates API keys for requests without User-Agent. The `WUClient` uses `requests.Session` with a fixed User-Agent on all calls.
 
 ## Important Conventions
 
@@ -181,3 +182,5 @@ All station-scoped JS files use `window.WS_API_PREFIX` (set in `base.html`) to p
 - **Secondary stations**: compact cards (`col-xl-3`) sorted by online status then distance from primary (Haversine)
 - **Offline stations**: faded (opacity 0.45), grouped at bottom
 - **Search bar**: filters by station name or ID in real-time
+- **Progressive loading (SSE)**: homepage uses `/api/stations/stream` (Server-Sent Events) to load stations one at a time. On page open, placeholder cards with spinners are shown for all stations (using `window.WS_STATIONS` from config). Each card is replaced in-place as data arrives. On refresh, existing cards stay visible and are updated progressively (no blank page). At completion, secondary cards are re-sorted by online status and distance. The refresh button shows live progress (`3/29 (15s)`).
+- **Auto-refresh**: configurable via `app.homepage_auto_refresh` and `app.homepage_refresh_minutes` in `config.yaml`
