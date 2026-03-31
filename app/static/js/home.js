@@ -288,12 +288,17 @@
 
     document.addEventListener("DOMContentLoaded", () => {
         loadStations();
-        setInterval(loadStations, 60000);
 
-        // Search input
+        document.getElementById("btnRefresh")?.addEventListener("click", loadStations);
+
         const searchInput = document.getElementById("stationSearch");
         if (searchInput) {
             searchInput.addEventListener("input", () => filterStations(searchInput.value));
+        }
+
+        // Auto-refresh driven by YAML config, only while the page is open
+        if (window.WS_HOME_AUTO_REFRESH && window.WS_HOME_REFRESH_MS > 0) {
+            setInterval(loadStations, window.WS_HOME_REFRESH_MS);
         }
     });
 })();

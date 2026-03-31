@@ -34,11 +34,11 @@ class WUClient:
                 resp = requests.get(url, params=params, timeout=TIMEOUT)
 
                 if resp.status_code == 204 or not resp.content:
-                    logger.info("No data returned (HTTP %s) from %s", resp.status_code, url)
+                    logger.info("No data returned (HTTP %s) for station %s from %s", resp.status_code, station_id, url)
                     return None
 
                 if resp.status_code == 401:
-                    logger.error("Invalid API key (HTTP 401)")
+                    logger.error("Invalid API key (HTTP 401) for station %s", station_id)
                     return None
 
                 if resp.status_code == 429:

@@ -13,6 +13,9 @@
             <input type="text" class="form-control" id="stationSearch"
                    placeholder="Cerca stazione...">
         </div>
+        <button class="btn btn-sm btn-outline-primary" id="btnRefresh">
+            <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
+        </button>
         <small style="color: var(--ws-text-secondary)">
             <i class="bi bi-clock me-1"></i><span id="lastUpdate" class="fw-semibold">--</span>
         </small>
@@ -28,5 +31,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+    window.WS_HOME_AUTO_REFRESH = {{ homepage_auto_refresh | tojson }};
+    window.WS_HOME_REFRESH_MS = {{ homepage_refresh_minutes }} * 60 * 1000;
+</script>
 <script src="{{ url_for('static', filename='js/home.js') }}"></script>
 {% endblock %}

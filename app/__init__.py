@@ -62,7 +62,12 @@ def create_app():
     # ---- context processor: inject station info into all templates ----
     @app.context_processor
     def inject_station_context():
-        ctx = {"all_stations": get_all_stations(cfg)}
+        app_cfg = cfg.get("app", {})
+        ctx = {
+            "all_stations": get_all_stations(cfg),
+            "homepage_auto_refresh": app_cfg.get("homepage_auto_refresh", False),
+            "homepage_refresh_minutes": app_cfg.get("homepage_refresh_minutes", 2),
+        }
         if hasattr(g, "station_id"):
             ctx["station_id"] = g.station_id
             ctx["station"] = g.station

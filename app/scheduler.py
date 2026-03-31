@@ -78,12 +78,6 @@ def init_scheduler(app):
     _scheduler.start()
     logger.info("Scheduler started")
 
-    # Run first sync immediately in background threads
-    if run_rapid_now:
-        threading.Thread(target=_run_rapid_all, args=(cfg,), daemon=True).start()
-    if run_hourly_now:
-        threading.Thread(target=_run_hourly_all, args=(cfg,), daemon=True).start()
-
 
 def get_scheduler() -> BackgroundScheduler | None:
     return _scheduler
